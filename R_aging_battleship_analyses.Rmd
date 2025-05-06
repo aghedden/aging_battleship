@@ -1,0 +1,349 @@
+---
+title: "cleaned_R_aging_battleship_analyses"
+output: html_document
+date: "2024-08-01"
+---
+
+# Load in Data and Required Packages
+```{r setup, include=TRUE} 
+knitr::opts_chunk$set(echo = TRUE)
+
+# set working directory
+setwd("~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battleship_task/analysis") 
+
+# set mirror for cran to allow for knitting
+r = getOption("repos")
+r["CRAN"] = "http://cran.us.r-project.org"
+options(repos = r)
+
+# install and call required packages 
+# if (!require("package")) {install.packages("package"); require("package")}
+if (!require("dplyr")) {install.packages("dplyr"); require("dplyr")}
+if (!require("plyr")) {install.packages("plyr"); require("plyr")}
+if (!require("readr")) {install.packages("readr"); require("readr")}
+if (!require("tidyverse")) {install.packages("tidyverse"); require("tidyverse")}
+if (!require("tidytext")) {install.packages("tidytext"); require("tidytext")}
+if (!require("textdata")) {install.packages("textdata"); require("textdata")}
+if (!require("ggplot2")) {install.packages("ggplot2"); require("ggplot2")} 
+if (!require("stringr")) {install.packages("stringr"); require("stringr")}
+if (!require("wordcloud2")) {install.packages("wordcloud2"); require("wordcloud2")} 
+if (!require("wordcloud")) {install.packages("wordcloud"); require("wordcloud")} 
+if (!require("RColorBrewer")) {install.packages("RColorBrewer"); require("RColorBrewer")} 
+if (!require("data.table")) {install.packages("data.table"); require("data.table")} 
+if (!require("changepoint")) {install.packages("changepoint"); require("changepoint")} 
+if (!require("tibble")) {install.packages("tibble"); require("tibble")} 
+if (!require("EntropyExplorer")) {install.packages("EntropyExplorer"); require("EntropyExplorer")} 
+if (!require("entropy")) {install.packages("entropy"); require("entropy")} 
+if (!require("knitr")) {install.packages("knitr"); require("knitr")} 
+if (!require("lme4")) {install.packages("lme4"); require("lme4")}
+if (!require("sjPlot")) {install.packages('sjPlot'); require("sjPlot")}
+if (!require("see")) {install.packages('see'); require("see")}
+if (!require("brms")) {install.packages('brms'); require("brms")}
+if (!require("devtools")) {install.packages("devtools"); require("devtools")}
+if (!require("ggpubr")) {install.packages('ggpubr'); require("ggpubr")}
+if (!require("lmerTest")) {install.packages('lmerTest'); require("lmerTest")}
+if (!require("dlookr")) {install.packages('dlookr'); require("dlookr")}
+if (!require("cowplot")) {install.packages('cowplot'); require("cowplot")}
+if (!require("gridGraphics")) {install.packages('gridGraphics'); require("gridGraphics")}
+if (!require("ggeffects")) {install.packages('ggeffects'); require("ggeffects")}
+if (!require("ggpubr")) {install.packages('ggpubr'); require("ggpubr")}
+if (!require("robustlmm")) {install.packages('robustlmm'); require("robustlmm")}
+if (!require("MASS")) {install.packages('MASS'); require("MASS")}
+```
+
+# Load in Data
+```{r}
+
+# data for the information and reward mixed effects model:
+info_rew_mixed_eff_data <- read.csv("~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battleship_task/analysis/dataframes/info_rew_mixed_eff_data.csv")
+
+# data with choice distance 
+cart_dist_ent_df <- read.csv("~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battleship_task/analysis/dataframes/cart_dist_ent_df.csv")
+
+# dataframe with forager scores, information and reward values, and changepoint for each participant
+forscore_cpt_data <- read.csv("~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battleship_task/analysis/dataframes/forscore_cpt_data.csv")
+
+# totals df
+totals_df <- read.csv('~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battleship_task/analysis/dataframes/totals_df.csv')
+
+```
+
+# Mixed Effects Model for Information and Reward Utilization/Prioritization
+Investigate the effect of information, reward, trial number, and age on choice number
+
+Run a mixed-effects linear regression to regress **choice number** in trial against **trial number** in session, the expected **reward** for the chosen tile, the expected **information** for the chosen tile, and **age**. Also, test for all possible interactions. Include intercepts for subjects for random effects. 
+
+**Parameters:**
+
+- Choice_Number: The choice number in a given trial, where a choice is a selection of a tile on the grid
+- Information: The expected information for the chosen tile on the given choice, where information is the difference in the entropy, or uncertainty, before and after each choice outcome
+- Reward: The expected reward for the chosen tile on the given choice, where reward for a given tile is divided by the total number of times that tile had been previously selected
+- Trial: The trial number at which a choice was made
+- Age: The age of the participant
+- Subject: The unique Subject ID for each participant
+
+**Results:**
+
+- As choice number increased, the use of information on tile selection decreased 
+- The use of reward on tile selection increased with increasing choice number
+- A significant interaction between information and reward was found 
+- A significant interaction was also found between trial number and age 
+- A three-way interaction was also found between information, reward, and trial number 
+- A significant three-way interaction between information, trial number, and age
+```{r}
+info_rew_mix_mod <- lmerTest::lmer(Choice_Number ~ 1 + Information*Reward*Trial*Age + (1|Subject), data=info_rew_mixed_eff_data, control=lmerControl(optCtrl=list(optimizer='Nelder-Mead',maxfun=2e8)))
+summary(info_rew_mix_mod)
+```
+
+# Information and Reward Analyses
+## Information and Reward Variables
+Run a mixed-effects linear regression to regress **information** against **reward**. Include intercepts for subjects for random effects. 
+
+
+**Parameters:**
+
+- Information: The expected information for the chosen tile on the given choice, where information is the difference in the entropy, or uncertainty, before and after each choice outcome
+- Reward: The expected reward for the chosen tile on the given choice, where reward for a given tile is the number of of times choosing that tile revealed a portion of the shape (hits) in the past divided by the total number of times that tile had been previously selected
+- Subject: The unique Subject ID for each participant
+             
+
+**Results:**
+
+- Information and reward are negatively correlated (β = -0.021 ± 0.006, p < 0.001)
+```{r}
+rew_info_rel_model=lmer(Information ~ Reward + (Reward|Subject), data=info_rew_mixed_eff_data)
+summary(rew_info_rel_model)
+```
+
+## Information and Reward Relationship as Trials Progress
+Run a mixed-effects linear regression to regress **information** against **reward** and **trial number** as well as the **reward X trial number** interaction. Include intercepts for subjects for random effects. 
+
+
+**Parameters:**
+
+- Information: The expected information for the chosen tile on the given choice, where information is the difference in the entropy, or uncertainty, before and after each choice outcome
+- Reward: The expected reward for the chosen tile on the given choice, where reward for a given tile is the number of of times choosing that tile revealed a portion of the shape (hits) in the past divided by the total number of times that tile had been previously selected
+- Trial: The trial number at which a choice was made
+- Subject: The unique Subject ID for each participant
+
+
+**Results:**
+
+- Information and reward become more negatively correlated as trial number increases (β = -0.003 ± 0.0003, p < 0.0001)
+```{r}
+rew_info_trial_rel_model=lmer(Information ~ Reward*Trial + (Reward*Trial|Subject), data=info_rew_mixed_eff_data)
+summary(rew_info_trial_rel_model)
+```
+
+
+# Choice Distance Mixed Effects Model
+Investigate the effect of age, choice number, and trial number on pairwise choice distance. 
+
+Run a mixed-effects linear regression to regress **choice distance** between each pair of choices in trial against **age** of the participant, **choice number** in trial, and **trial number** in session. Also, test for all possible interactions. Include intercepts for subjects for random effects. 
+
+
+**Parameters:**
+
+- choice_dist: The choice number in a given trial, where a choice is a selection of a tile on the grid
+- age: The age of the participant
+- choice_num: The choice number in a given trial, where a choice is a selection of a tile on the grid
+- trial_num: The trial number at which a choice was made
+- subject_id: The unique Subject ID for each participant
+
+**Results:**
+
+- As age increased, the distance between pairs of choices also increased
+- The distance between choices grew as trials progressed 
+- Significant interactions between the following:
+  - Age and choice number
+  - Age and trial number
+  - Choice number and trial number
+- A three-way interaction between age, choice number, and trial number reveals that the effect of choice number and trial number on choice distance is weaker in older adults
+```{r}
+choice_dist_mix_mod <- lmerTest::lmer(choice_dist ~ age*choice_num*trial_num + (1|subject_id), data=cart_dist_ent_df) 
+summary(choice_dist_mix_mod)
+```
+
+
+# Aging and Learning Speed (i.e., final changepoint)
+Run a linear regression to regress **changepoint** against **age** of the participant.
+
+**Parameters:**
+
+- changepoint: The trial number at which the changepoint detection test detected learning of the shape set. Lower changepoint indicates a sooner trial and thus indicates faster learning.
+- age: The age of the participant
+        
+**Results:**
+
+- With increasing age, the final changepoint trial occurs earlier (β = -0.267 ± 0.103, p = 0.01)
+- Older adults learn the shapes more quickly
+```{r}
+age_cpt_mod <- lm(changepoint ~ age, data = forscore_cpt_data)
+summary(age_cpt_mod)
+```
+
+# General Task Completion Analyses
+## Total Trials Completed and Age
+Run a linear regression to regress **total trials** in session against **age** of the participant.
+
+**Parameters:**
+
+- tot_trials: The total number of trials completed by the participant during the task
+- age: The age of the participant
+
+**Results:**
+
+- As age increased, the number of trials completed in the task decreased (β = -0.199 ± 0.084, p = 0.018)
+- Older age is associated with completing fewer trials
+```{r}
+age_trial_corr_model <- lm(tot_trials ~ age, data = totals_df)
+summary(age_trial_corr_model)
+```
+
+## Total Choices Made and Age
+Run a linear regression to regress **total choices** in session against **age** of the participant.
+
+**Parameters:**
+
+- tot_choices: The **total** number of choices made by the participant in the task
+- age: The age of the participant
+
+**Results:**
+
+- There was no relationship between the total number of choices made in the task and age
+- Older age is not associated with more choices overall
+```{r}
+age_tot_choice_model <- lm(tot_choices ~ age, data = totals_df)
+summary(age_tot_choice_model)
+```
+
+## Total Choices per Trial and Age
+Run a linear regression to regress the **average choices** made against **age** of the participant.
+
+**Parameters:**
+
+- avg_choices: The average number of choices per trial for a given participant
+- age: The age of the participant
+
+**Results:**
+
+- There is a positive relationship between the average number of choices per trial and age
+- Older age is associated with making more choices per trial (β = 0.030 ± 0.007, p < 0.001)
+```{r}
+age_avg_choice_model <- lm(avg_choices ~ age, data = totals_df)
+summary(age_avg_choice_model)
+```
+
+## Total Information per Trial and Age
+Run a linear regression to regress the **average amount of information per trial** against **age** of the participant
+
+**Parameters:**
+
+- t_prop_tot_info: The average amount of information gain per trial for a given participant
+- age: The age of the participant
+
+**Results:**
+
+- As age increased, the average amount of information per trial increased (β = 0.023 ± 0.005, p < 0.001)
+- Older age is associated with gaining more information per trial
+```{r}
+age_avg_info_model <- lm(t_prop_tot_info ~ age, data = totals_df)
+summary(age_avg_info_model)
+```
+
+# Foraging Abilities and Learning Analyses
+## Information Forager Score and Reward Forager Score 
+Run Pearson correlation test to test the relationship between **information forager score** and **reward forager score**
+
+**Parameters:**
+
+- info_fs: The information forager score
+- rew_fs: The reward forager score
+
+**Results:**
+
+-  Information forager scores and reward forager scores are significantly anticorrelated (r = -0.629, p < 0.001) 
+```{r}
+cor.test(forscore_cpt_data$info_fs, forscore_cpt_data$rew_fs, method = "pearson")
+```
+
+## Age and Information Forager Score
+Run a linear regression to regress **information forager score** against **age** of participant
+
+**Parameters:**
+
+- info_fs: The information forager score for a given participant
+- age: The age of the participant
+
+**Results:**
+
+- Older age is associated with higher information forager scores (β = 0.003 ± 0.0008, p < 0.001) 
+```{r}
+age_info_fs_mod <- lm(info_fs ~ age, data = forscore_cpt_data)
+summary(age_info_fs_mod)
+```
+
+## Age and Reward Forager Score
+Run a linear regression to regress **reward forager score** against **age** of the participant
+
+**Parameters:**
+
+- rew_fs: The reward forager score for a given participant
+- age: The age of the participant
+
+**Results:**
+
+- Older age is associated with lower reward forager scores (β = -0.001 ± 0.0004, p < 0.001).
+```{r}
+age_rew_fs_mod <- lm(rew_fs ~ age, data = forscore_cpt_data)
+summary(age_rew_fs_mod)
+```
+
+## Information Forager Score and Changepoint
+Run a linear regression to regress **changepoint** against **information forager score** and **age** of the participant, along with the **information forager score X age** interaction. 
+
+**Parameters:**
+
+- changepoint: The trial number at which the changepoint detection test detected learning of the shape set. Lower changepoint indicates a sooner trial and thus indicates faster learning
+- info_fs: The information forager score for a given participant
+- age: The age of the participant
+
+**Results:**
+
+- The ability to forage for information was associated with a lower changepoint (β = -63.149 ± 22.569, p = 0.006)
+- In other words, the ability to forage for information is associated with faster learning
+- There was no main effect of age or interaction between age and information forager score
+```{r}
+info_fs_cpt_age <- lm(changepoint ~ info_fs + age + info_fs:age, data=forscore_cpt_data)
+summary(info_fs_cpt_age)
+```
+
+## Reward Forager Score and Changepoint
+Run a linear regression to regress **changepoint** against **reward forager score** and **age** of the participant, along with the **reward forager score X age** interaction. 
+
+**Parameters:**
+
+- changepoint: The trial number at which the changepoint detection test detected learning of the shape set. Lower changepoint indicates a sooner trial and thus indicates faster learning
+- rew_fs: The reward forager score for a given participant
+- age: The age of the participant
+
+**Results:**
+
+- The ability to forage for reward was associated with a higher changepoint (β = 127.684 ± 56.382, p = 0.025)
+- In other words, the ability to forage for reward is associated with slower learning
+- There was no main effect of age or interaction between age and reward forager score
+```{r}
+rew_fs_cpt_age <- lm(changepoint ~ rew_fs + age + rew_fs:age, data=forscore_cpt_data)
+summary(rew_fs_cpt_age)
+```
+
+
+
+
+
+
+
+
+finishing up ...
+- remove my working directory from the top, users will fill this in themselves
+- remove path from loading in files\
