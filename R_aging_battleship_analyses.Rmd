@@ -79,7 +79,7 @@ totals_df <- read.csv('~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battl
 ```
 
 ### Load in and wrangle data generated and semi-processed in MATLAB
-Original data from the Battleship task was pre-processed in MATLAB. This first set of chunks takes these data and wrangles them to the dataframe(s) that are used throughout these analyses.
+Original data from the Battleship task was pre-processed in MATLAB. This first set of chunks takes these data and wrangles them to the dataframe(s) that are used throughout these analyses
 
 #### Create dataframe for mixed effects models 
 The purpose of this data will be to compare how information, reward, trial number, and age impact the choice number using a mixed effects model.
