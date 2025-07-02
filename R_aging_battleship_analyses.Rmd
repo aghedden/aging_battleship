@@ -12,7 +12,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 # set working directory
-setwd("~/Library/CloudStorage/Box-Box/Bakkour-Lab/projects/Battleship_task/analysis")
+# setwd("")
 
 # set mirror for cran to allow for knitting
 r = getOption("repos")
@@ -541,6 +541,4 @@ summary(rew_fs_cpt_age)
 
 
 
-finishing up ...
-- remove my working directory from the top, users will fill this in themselves
-- remove path from loading in files\
+
