@@ -12,3 +12,7 @@ I received the following grants/awards to support this project:
 - Jeff Metcalf Odyssey Fellowship Grant (5 separate awards), awarded to support unpaid research and internships conducted during the academic year 
 
 ## Files
+- `Battleship Dashboard.pdf`: PDF of a static of a dashboard I created in Tableau with some of the study's main findings, specifically through the lens of exploration in the task.
+- `aging_bship_main_analyses.Rmd`: An R Markdown file containing the main analyses and visualizations from the study. This is limited to the final set of analyses and visualizations.
+- `bs_info_rew_exploration_calcuations.ipynb`: A Jupyter Notebook Python file containing code that calculates reward, information, and Euclidean distance for each tile on a 5x5 grid (25 tiles total) for every choice, within every trial, for each participant and calculates various types of exploration using such values. 
+- `bship_mousetracking_wrangling.ipynb`: A Jupyter Notebook Python file containing initial wrangling steps for a complex mousetracking data file. Wrangled to a dataframe containing 11M+ data points.
