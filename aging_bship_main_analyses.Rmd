@@ -210,6 +210,537 @@ summary(choice_dist_mix_mod)
 confint(choice_dist_mix_mod)
 ```
 
+## Choice Distance Plot
+### Bin data and find average points to plot 
+```{r}
+# bin the data and find the average points to plot
+
+# bin by age
+young_bin_df2 <- cart_dist_ent_df[cart_dist_ent_df$age <= 33,]
+old_bin_df2 <- cart_dist_ent_df[cart_dist_ent_df$age >= 56,]
+
+
+# within each age bin, bin by trial (3 bins, early middle and late)
+young_bin_df2 <- young_bin_df2 %>%
+  group_by(subject_id) %>% # perform the next functions by unique Subject
+  mutate(trial_bin_ranges = cut(trial_num, breaks=3)) %>% # create bins (by subject) for trial numbers; will result in a bin range unique to a subject; only leaving this in here as a sanity check to make sure it is going by unique subject id
+  mutate(trial_bins = as.numeric(cut(trial_num, breaks=3))) # create a column with the bin ranges replaced with bin number 1, 2, or 3
+
+old_bin_df2 <- old_bin_df2 %>%
+  group_by(subject_id) %>% # perform the next functions by unique Subject
+  mutate(trial_bin_ranges = cut(trial_num, breaks=3)) %>% # create bins (by subject) for trial numbers; will result in a bin range unique to a subject; only leaving this in here as a sanity check to make sure it is going by unique subject id
+  mutate(trial_bins = as.numeric(cut(trial_num, breaks=3))) # create a column with the bin ranges replaced with bin number 1, 2, or 3
+
+
+# within each trial bin, bin by choice number (5 equal-sized bins)
+# Rank choice number values
+young_bin_df2 <- young_bin_df2 %>%
+  group_by(subject_id, trial_bins) %>% # perform the next functions by unique Subject AND trial_bin
+  mutate(choice_num_ranked = rank(choice_num)) # rank the choice number values for each subject trial bin - by - trial bin
+num_bins <- 5
+young_bin_df2 <- young_bin_df2 %>%
+  mutate(choice_num_bins = cut(choice_num_ranked, breaks = seq(0, max(choice_num_ranked), length.out = num_bins + 1), labels = FALSE, include.lowest = TRUE))
+
+old_bin_df2 <- old_bin_df2 %>%
+  group_by(subject_id, trial_bins) %>% # perform the next functions by unique Subject AND trial_bin
+  mutate(choice_num_ranked = rank(choice_num)) # rank the choice number values for each subject trial bin - by - trial bin
+num_bins <- 5
+old_bin_df2 <- old_bin_df2 %>%
+  mutate(choice_num_bins = cut(choice_num_ranked, breaks = seq(0, max(choice_num_ranked), length.out = num_bins + 1), labels = FALSE, include.lowest = TRUE))
+
+
+# Find the x- (choice number) and y-values (choice distance) for each subject in each choice number bin, in each trial bin
+
+# Choice Number Coordinates: Make new table that holds all x- (choice number) and y-values (choice distance) per bin per subject; for each choice number bin within each trial bin, each subject should therefore end up with 15 x-y coordinates, one for each choice number bin in each trial bin
+
+# YOUNG
+tmp_young_cn_bin <- data.frame(matrix(ncol = 5, nrow = 1)) # create temp df to hold data and bind to main df in for loop below
+colnames(tmp_young_cn_bin) <- c('subject_id', 'trial_bin', 'choice_num_bin', 'X_cn', 'Y_c_dist') # provide column names
+young_cdist_bin_coordinates <- data.frame() # create new data frame for YA bin coordinate values; should be 855 rows (check)
+
+for(s in unique(young_bin_df2$subject_id)){ 
+  for(t in unique(young_bin_df2$trial_bins)){  
+    for(c in unique(young_bin_df2$choice_num_bins)){  
+      tmp_young_cn_bin$subject_id = s 
+      tmp_young_cn_bin$trial_bin = t
+      tmp_young_cn_bin$choice_num_bin = c 
+      subset_data <- subset(young_bin_df2, subject_id == s & trial_bins == t & choice_num_bins == c) 
+      tmp_young_cn_bin$X_cn = mean(subset_data$choice_num, na.rm=TRUE) 
+      tmp_young_cn_bin$Y_c_dist = mean(subset_data$choice_dist, na.rm=TRUE) 
+      young_cdist_bin_coordinates = rbind(young_cdist_bin_coordinates, tmp_young_cn_bin) 
+    }
+  }
+}
+
+# OLD
+tmp_old_cn_bin <- data.frame(matrix(ncol = 5, nrow = 1)) # create temp df to hold data and bind to main df in for loop below
+colnames(tmp_old_cn_bin) <- c('subject_id', 'trial_bin', 'choice_num_bin', 'X_cn', 'Y_c_dist') # provide column names
+old_cdist_bin_coordinates <- data.frame() # create new data frame for YA bin coordinate values; should be 450 rows (check)
+
+for(s in unique(old_bin_df2$subject_id)){ 
+  for(t in unique(old_bin_df2$trial_bins)){  
+    for(c in unique(old_bin_df2$choice_num_bins)){  
+      tmp_old_cn_bin$subject_id = s 
+      tmp_old_cn_bin$trial_bin = t
+      tmp_old_cn_bin$choice_num_bin = c 
+      subset_data <- subset(old_bin_df2, subject_id == s & trial_bins == t & choice_num_bins == c) 
+      tmp_old_cn_bin$X_cn = mean(subset_data$choice_num, na.rm=TRUE) 
+      tmp_old_cn_bin$Y_c_dist = mean(subset_data$choice_dist, na.rm=TRUE) 
+      old_cdist_bin_coordinates = rbind(old_cdist_bin_coordinates, tmp_old_cn_bin) 
+    }
+  }
+}
+
+
+# NORMALIZE CHOICE NUMBER VALUES AND CHOICE DISTANCE VALUES
+# we need to normalize our choice distance and choice number data in order to account for within-subject variability 
+# removing between-subject variability in the error bars
+# https://www.cogsci.nl/blog/tutorials/156-an-easy-way-to-create-graphs-with-within-subject-error-bars 
+# to remove the between-subject variability, subtract the subject average from each observation, and add the grand average (i.e., the average of all the cells)
+
+# find the "grand average" for choice distance and choice number 
+young_cn_grand_average <- mean(young_bin_df2$choice_num, na.rm=TRUE) # 5.420612
+young_cdist_grand_average <- mean(young_bin_df2$choice_dist, na.rm=TRUE) # 1.500176
+# find the "grand average" for choice distance and choice number 
+old_cn_grand_average <- mean(old_bin_df2$choice_num, na.rm=TRUE) # 6.04649
+old_cdist_grand_average <- mean(old_bin_df2$choice_dist, na.rm=TRUE) # 1.613049
+
+# find the average choice distance and choice number values for each subject
+tmp_sub_cncd_avg <- data.frame(matrix(ncol = 3, nrow = 1)) # create temp df 
+colnames(tmp_sub_cncd_avg) <- c('subject_id', 'avg_cn', 'avg_cdist') # provide column names
+young_sub_cncd_avg <- data.frame() # create new data frame for young bin value averages
+for(s in unique(young_bin_df2$subject_id)){
+  tmp_sub_cncd_avg$subject_id = s
+  subset_data <- subset(young_bin_df2, subject_id == s)
+  tmp_sub_cncd_avg$avg_cn = mean(subset_data$choice_num, na.rm = TRUE)
+  tmp_sub_cncd_avg$avg_cdist = mean(subset_data$choice_dist, na.rm = TRUE)
+  young_sub_cncd_avg = rbind(young_sub_cncd_avg, tmp_sub_cncd_avg)
+}
+
+tmp_sub_cncd_avg <- data.frame(matrix(ncol = 3, nrow = 1))  
+colnames(tmp_sub_cncd_avg) <- c('subject_id', 'avg_cn', 'avg_cdist') 
+old_sub_cncd_avg <- data.frame() 
+for(s in unique(old_bin_df2$subject_id)){
+  tmp_sub_cncd_avg$subject_id = s
+  subset_data <- subset(old_bin_df2, subject_id == s)
+  tmp_sub_cncd_avg$avg_cn = mean(subset_data$choice_num, na.rm = TRUE)
+  tmp_sub_cncd_avg$avg_cdist = mean(subset_data$choice_dist, na.rm = TRUE)
+  old_sub_cncd_avg = rbind(old_sub_cncd_avg, tmp_sub_cncd_avg)
+}
+
+# add subject averages to young_cdist_bin_coordinates df
+# YOUNG
+# choice number averages
+young_cdist_bin_coordinates$avg_cn <- NA # make new column
+for (i in 1:nrow(young_cdist_bin_coordinates)) {
+  subject_value <- young_cdist_bin_coordinates$subject_id[i]
+  matching_row <- young_sub_cncd_avg[young_sub_cncd_avg$subject_id == subject_value, ] 
+  if (nrow(matching_row) > 0) { young_cdist_bin_coordinates
+    young_cdist_bin_coordinates$avg_cn[i] <- matching_row$avg_cn
+  }
+}
+# choice distance averages
+young_cdist_bin_coordinates$avg_cdist <- NA # make new column
+for (i in 1:nrow(young_cdist_bin_coordinates)) {
+  subject_value <- young_cdist_bin_coordinates$subject_id[i]
+  matching_row <- young_sub_cncd_avg[young_sub_cncd_avg$subject_id == subject_value, ] 
+  if (nrow(matching_row) > 0) { young_cdist_bin_coordinates
+    young_cdist_bin_coordinates$avg_cdist[i] <- matching_row$avg_cdist
+  }
+}
+
+# OLD
+# choice number averages
+old_cdist_bin_coordinates$avg_cn <- NA # make new column
+for (i in 1:nrow(old_cdist_bin_coordinates)) {
+  subject_value <- old_cdist_bin_coordinates$subject_id[i]
+  matching_row <- old_sub_cncd_avg[old_sub_cncd_avg$subject_id == subject_value, ] 
+  if (nrow(matching_row) > 0) { old_cdist_bin_coordinates
+    old_cdist_bin_coordinates$avg_cn[i] <- matching_row$avg_cn
+  }
+}
+# choice distance averages
+old_cdist_bin_coordinates$avg_cdist <- NA # make new column
+for (i in 1:nrow(old_cdist_bin_coordinates)) {
+  subject_value <- old_cdist_bin_coordinates$subject_id[i]
+  matching_row <- old_sub_cncd_avg[old_sub_cncd_avg$subject_id == subject_value, ] 
+  if (nrow(matching_row) > 0) { old_cdist_bin_coordinates
+    old_cdist_bin_coordinates$avg_cdist[i] <- matching_row$avg_cdist
+  }
+}
+
+## subtract subject average and add grand average, making a new column for the new normalized cdist and cn values 
+young_cdist_bin_coordinates$norm_cn <- young_cdist_bin_coordinates$X_cn - young_cdist_bin_coordinates$avg_cn + young_cn_grand_average
+young_cdist_bin_coordinates$norm_cdist <- young_cdist_bin_coordinates$Y_c_dist - young_cdist_bin_coordinates$avg_cdist + young_cdist_grand_average
+
+old_cdist_bin_coordinates$norm_cn <- old_cdist_bin_coordinates$X_cn - old_cdist_bin_coordinates$avg_cn + old_cn_grand_average
+old_cdist_bin_coordinates$norm_cdist <- old_cdist_bin_coordinates$Y_c_dist - old_cdist_bin_coordinates$avg_cdist + old_cdist_grand_average
+
+#### now we have normalized coordinates for each participant within each of our bins; let's average that to find the coordinates that we will plot
+# take all of the normalized coordinates, and average across subjects per cn bin within each trial bin, resulting in one df containing 15 sets of coordinates to be plotted as the average binned raw data
+# YOUNG
+tmp_avg_pts <- data.frame(matrix(ncol = 4, nrow = 1)) 
+colnames(tmp_avg_pts) <- c('trial_bin', 'choice_num_bin', 'avg_X', 'avg_Y') 
+young_avg_cdist_coordinates <- data.frame() 
+for(t in unique(young_cdist_bin_coordinates$trial_bin)){
+  for(c in unique(young_cdist_bin_coordinates$choice_num_bin)){
+    tmp_avg_pts$trial_bin = t
+    tmp_avg_pts$choice_num_bin = c
+    subset_data <- subset(young_cdist_bin_coordinates, trial_bin == t & choice_num_bin == c)
+    tmp_avg_pts$avg_X = mean(subset_data$norm_cn, na.rm = TRUE) 
+    tmp_avg_pts$avg_Y = mean(subset_data$norm_cdist, na.rm = TRUE) 
+    young_avg_cdist_coordinates = rbind(young_avg_cdist_coordinates, tmp_avg_pts)
+  }
+}
+
+# OLD
+tmp_avg_pts <- data.frame(matrix(ncol = 4, nrow = 1)) 
+colnames(tmp_avg_pts) <- c('trial_bin', 'choice_num_bin', 'avg_X', 'avg_Y') 
+old_avg_cdist_coordinates <- data.frame() 
+for(t in unique(old_cdist_bin_coordinates$trial_bin)){
+  for(c in unique(old_cdist_bin_coordinates$choice_num_bin)){
+    tmp_avg_pts$trial_bin = t
+    tmp_avg_pts$choice_num_bin = c
+    subset_data <- subset(old_cdist_bin_coordinates, trial_bin == t & choice_num_bin == c)
+    tmp_avg_pts$avg_X = mean(subset_data$norm_cn, na.rm = TRUE) 
+    tmp_avg_pts$avg_Y = mean(subset_data$norm_cdist, na.rm = TRUE) 
+    old_avg_cdist_coordinates = rbind(old_avg_cdist_coordinates, tmp_avg_pts)
+  }
+}
+```
+
+### Find marginal effect regression lines
+```{r}
+# transform trial columns into numeric class for mean calculations
+young_bin_df2$trial_num <- as.numeric(young_bin_df2$trial_num)
+old_bin_df2$trial_num <- as.numeric(old_bin_df2$trial_num)
+
+# find average trials for each bin
+# find the average trial number within each trial bin and make that the trial value when finding the marginal effects
+# YOUNG
+young_cdist_tbin1_mean <- mean(young_bin_df2$trial_num[young_bin_df2$trial_bins == 1], na.rm = TRUE)
+young_cdist_tbin2_mean <- mean(young_bin_df2$trial_num[young_bin_df2$trial_bins == 2], na.rm = TRUE)
+young_cdist_tbin3_mean <- mean(young_bin_df2$trial_num[young_bin_df2$trial_bins == 3], na.rm = TRUE)
+
+# OLD
+old_cdist_tbin1_mean <- mean(old_bin_df2$trial_num[old_bin_df2$trial_bins == 1], na.rm = TRUE)
+old_cdist_tbin2_mean <- mean(old_bin_df2$trial_num[old_bin_df2$trial_bins == 2], na.rm = TRUE)
+old_cdist_tbin3_mean <- mean(old_bin_df2$trial_num[old_bin_df2$trial_bins == 3], na.rm = TRUE)
+
+
+# find marginal effects for each of the 6 lines
+# YOUNG
+young_cdist_meffects_t1 <- ggpredict(choice_dist_mix_mod, c("choice_num", "age[18:33]", "trial_num[young_cdist_tbin1_mean]"))
+young_cdist_meffects_t2 <- ggpredict(choice_dist_mix_mod, c("choice_num", "age[18:33]", "trial_num[young_cdist_tbin2_mean]"))
+young_cdist_meffects_t3 <- ggpredict(choice_dist_mix_mod, c("choice_num", "age[18:33]", "trial_num[young_cdist_tbin3_mean]"))
+
+# OLD
+old_cdist_meffects_t1 <- ggpredict(choice_dist_mix_mod, c("choice_num", "age[56:71]", "trial_num[old_cdist_tbin1_mean]"))
+old_cdist_meffects_t2 <- ggpredict(choice_dist_mix_mod, c("choice_num", "age[56:71]", "trial_num[old_cdist_tbin2_mean]"))
+old_cdist_meffects_t3 <- ggpredict(choice_dist_mix_mod, c("choice_num", "age[56:71]", "trial_num[old_cdist_tbin3_mean]"))
+```
+
+### Make young bin scatterplot
+```{r}
+# plot the average points per bin
+young_avg_cdist_coordinates <- young_avg_cdist_coordinates %>% arrange(choice_num_bin)
+
+# plot average coordinates for young adults 
+## change default colors for the plots to match the model plot
+colors <- c("#E41818", "#26BC32", "#2A8FFC")
+factor_levels <- unique(young_avg_cdist_coordinates$trial_bin)
+## make the plot
+plot(young_avg_cdist_coordinates$avg_X, young_avg_cdist_coordinates$avg_Y, type = "n")
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- young_avg_cdist_coordinates[young_avg_cdist_coordinates$trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+# using SE for error bars
+# Loop through factor levels again to draw error bars
+plot(young_avg_cdist_coordinates$avg_X, young_avg_cdist_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.5), ylim = c(-2,13))
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- young_avg_cdist_coordinates[young_avg_cdist_coordinates$trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+for (level in factor_levels) {
+  subset_data <- young_avg_cdist_coordinates[young_avg_cdist_coordinates$trial_bin == level, ]
+  # Calculate standard error of the mean
+  se_values <- sd(subset_data$avg_Y) / sqrt(length(subset_data$avg_Y))
+
+  # Draw error bars using arrows
+  arrows(
+    subset_data$avg_X,
+    subset_data$avg_Y - se_values,
+    subset_data$avg_X,
+    subset_data$avg_Y + se_values,
+    angle = 90, code = 3, length = 0.1, col = colors[level]
+  )
+}
+
+young_cdist_raw_plot <- recordPlot()
+```
+
+### Make old bin scatterplot
+```{r}
+# plot the average points per bin
+old_avg_cdist_coordinates <- old_avg_cdist_coordinates %>% arrange(choice_num_bin)
+
+# plot average coordinates for young adults 
+## change default colors for the plots to match the model plot
+colors <- c("#E41818", "#26BC32", "#2A8FFC")
+factor_levels <- unique(old_avg_cdist_coordinates$trial_bin)
+## make the plot
+plot(old_avg_cdist_coordinates$avg_X, old_avg_cdist_coordinates$avg_Y, type = "n")
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- old_avg_cdist_coordinates[old_avg_cdist_coordinates$trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+# using SE for error bars
+# Loop through factor levels again to draw error bars
+plot(old_avg_cdist_coordinates$avg_X, old_avg_cdist_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.5), ylim = c(-2,13))
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- old_avg_cdist_coordinates[old_avg_cdist_coordinates$trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+for (level in factor_levels) {
+  subset_data <- old_avg_cdist_coordinates[old_avg_cdist_coordinates$trial_bin == level, ]
+  # Calculate standard error of the mean
+  se_values <- sd(subset_data$avg_Y) / sqrt(length(subset_data$avg_Y))
+
+  # Draw error bars using arrows
+  arrows(
+    subset_data$avg_X,
+    subset_data$avg_Y - se_values,
+    subset_data$avg_X,
+    subset_data$avg_Y + se_values,
+    angle = 90, code = 3, length = 0.1, col = colors[level]
+  )
+}
+old_cdist_raw_plot <- recordPlot()
+```
+
+### Make combined plot
+```{r}
+# set theme for all plots 
+set_theme(
+  base = theme_classic()
+)
+
+# YOUNG
+young_avg_cdist_coordinates$trial_bin <- as.factor(young_avg_cdist_coordinates$trial_bin)
+young_cdist_comb_plot <- ggplot(young_avg_cdist_coordinates, aes(x = avg_X, y = avg_Y, color = factor(trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), guide = "legend", labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01) + # Adjust position if needed
+  geom_smooth(data = young_cdist_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_cdist_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_cdist_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Young Age Bin") + # add title
+  labs(subtitle = "Ages 18-33") +
+  #xlim(0.43,11) +
+  #xlim(2.035,11) +
+  xlim(2.7,12.5) +
+  ylim(1,2.25) +
+  ylab("Choice Distance") + # add y-axis label
+  xlab("Choice Number") + # add x-axis label
+  theme(panel.grid.major = element_blank()) +  # Remove major grid lines
+  theme(panel.grid.minor = element_blank()) +
+  theme(axis.text = element_text(size = 14)) + 
+  theme(axis.title = element_text(size = 16)) +
+  theme(plot.subtitle = element_text(size = 16)) +
+  theme(plot.title = element_text(size = 18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.text = element_text(size = 14)) +
+  theme(plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines')) +
+  theme(legend.position = "bottom") +
+  theme(legend.justification = "center") +
+  theme(legend.title= element_blank())
+young_cdist_comb_plot  
+
+old_avg_cdist_coordinates$trial_bin <- as.factor(old_avg_cdist_coordinates$trial_bin)
+old_cdist_comb_plot <- ggplot(old_avg_cdist_coordinates, aes(x = avg_X, y = avg_Y, color = factor(trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), guide = "legend", labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01) + # Adjust position if needed
+  geom_smooth(data = old_cdist_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_cdist_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_cdist_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Old Age Bin") + # add title
+  labs(subtitle = "Ages 56-71") +
+  #xlim(0.43,11) +
+  #xlim(2.035,11) +
+  xlim(2.7,12.5) +
+  ylim(1,2.25) +
+  ylab("Choice Distance") + # add y-axis label
+  xlab("Choice Number") + # add x-axis label
+  theme(panel.grid.major = element_blank()) +  # Remove major grid lines
+  theme(panel.grid.minor = element_blank()) +
+  theme(axis.text = element_text(size = 14)) + 
+  theme(axis.title = element_text(size = 16)) +
+  theme(plot.subtitle = element_text(size = 16)) +
+  theme(plot.title = element_text(size = 18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.text = element_text(size = 14)) +
+  theme(plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines')) +
+  theme(legend.position = "bottom") +
+  theme(legend.justification = "center") +
+  theme(legend.title= element_blank())
+old_cdist_comb_plot  
+
+# combine the plots into 1
+cdist_comb_plot <- ggarrange(young_cdist_comb_plot, old_cdist_comb_plot, ncol = 2, nrow = 1, common.legend = TRUE, legend = "bottom", labels = c("A", "B"), font.label = list(size = 16))
+cdist_comb_plot
+```
+
+```{r}
+# Load required packages
+library(ggplot2)
+library(ggpubr)
+
+# YOUNG plot with modifications focusing only on what you need
+young_cdist_comb_plot <- ggplot(young_avg_cdist_coordinates, aes(x = avg_X, y = avg_Y, color = factor(trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), 
+                  guide = guide_legend(
+                    override.aes = list(linewidth = 3),
+                    keywidth = unit(2, "cm"),  # Increase width between legend items
+                    byrow = TRUE              # Arrange legend items in a row
+                  ),
+                  labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01) + 
+  geom_smooth(data = young_cdist_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_cdist_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_cdist_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Young Age Bin") + 
+  labs(subtitle = "Ages 18-33") +
+  xlim(2.7,12.5) +
+  ylim(1,2.25) +
+  ylab("Choice Distance") + 
+  xlab("Choice Number") +
+  
+  # Add a simple axis break indicator in the bottom left
+  annotate("text", x = 2.8, y = 1.03, label = "//", size = 5, angle = 45) +
+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 24), 
+        axis.title = element_text(size = 26),
+        plot.subtitle = element_text(size = 26, hjust = 0.5),
+        plot.title = element_text(size = 28, hjust = 0.5),
+        legend.text = element_text(size = 24),
+        plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines'),
+        legend.position = "bottom",
+        legend.justification = "center",
+        legend.title = element_blank(),
+        # Remove white boxes from legend
+        legend.key = element_blank(),
+        # Add gray background to legend
+        legend.background = element_rect(fill = "gray90"))
+
+# OLD plot with same modifications
+old_cdist_comb_plot <- ggplot(old_avg_cdist_coordinates, aes(x = avg_X, y = avg_Y, color = factor(trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), 
+                  guide = guide_legend(
+                    override.aes = list(linewidth = 3),
+                    keywidth = unit(2, "cm"),  # Increase width between legend items
+                    byrow = TRUE              # Arrange legend items in a row
+                  ),
+                  labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01) + 
+  geom_smooth(data = old_cdist_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_cdist_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_cdist_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Old Age Bin") + 
+  labs(subtitle = "Ages 56-71") +
+  xlim(2.7,12.5) +
+  ylim(1,2.25) +
+  ylab("Choice Distance") + 
+  xlab("Choice Number") +
+  
+  # Add a simple axis break indicator in the bottom left
+  annotate("text", x = 2.49, y = 1.03, label = "//", size = 6, angle = 145) +
+  
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 24), 
+        axis.title = element_text(size = 26),
+        plot.subtitle = element_text(size = 26, hjust = 0.5),
+        plot.title = element_text(size = 28, hjust = 0.5),
+        legend.text = element_text(size = 24),
+        plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines'),
+        legend.position = "bottom",
+        legend.justification = "center",
+        legend.title = element_blank(),
+        # Remove white boxes from legend
+        legend.key = element_blank(),
+        # Add gray background to legend
+        legend.background = element_rect(fill = "gray90"))
+
+# Combine the plots with shared legend
+cdist_comb_plot <- ggarrange(young_cdist_comb_plot, old_cdist_comb_plot, 
+                           ncol = 2, nrow = 1, 
+                           common.legend = TRUE, 
+                           legend = "bottom", 
+                           labels = c("A", "B"), 
+                           font.label = list(size = 26))
+
+# Display the combined plot
+cdist_comb_plot
+```
+```{r}
+# For both plots, add key.width to the guide_legend to increase spacing
+# Update the scale_color_manual with key.width parameter
+
+# For young_cdist_comb_plot:
+scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), 
+                  guide = guide_legend(
+                    override.aes = list(linewidth = 3),
+                    keywidth = unit(3, "cm"),  # Increase width between legend items
+                    byrow = TRUE              # Arrange legend items in a row
+                  ),
+                  labels = c("Early Trials", "Middle Trials", "Late Trials"))
+
+# For old_cdist_comb_plot:
+scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), 
+                  guide = guide_legend(
+                    override.aes = list(linewidth = 3),
+                    keywidth = unit(3, "cm"),  # Increase width between legend items
+                    byrow = TRUE              # Arrange legend items in a row
+                  ),
+                  labels = c("Early Trials", "Middle Trials", "Late Trials"))
+
+```
+
+## Choice distance vs age plot
+```{r}
+ggplot(data = cart_dist_ent_df, mapping = aes(x = age, y = choice_dist)) +
+  geom_point()
+
+mean_choice_dist_df <- aggregate(
+  cbind(choice_dist, age) ~ subject_id, 
+  data = cart_dist_ent_df, 
+  FUN = function(x) c(mean = mean(x, na.rm = TRUE))
+)
+
+plot(mean_choice_dist_df$age, mean_choice_dist_df$choice_dist)
+model <- lm(choice_dist ~ age, data = mean_choice_dist_df)
+abline(model, col = "red", lwd = 2) 
+```
+
+
 # Directed Exploration Analyses
 Run a linear regression to regress **mean directed exploration** against **age** of the participant.
 
@@ -224,6 +755,30 @@ dir_expl_age_model <- lm(overall_dir_expl ~ age, data = mean_expl_df)
 summary(dir_expl_age_model)
 confint(dir_expl_age_model)
 ```
+
+## Directed Exploration vs age plot
+```{r}
+direxpl_vs_age <- ggplot(mean_expl_df, aes(age, overall_dir_expl)) +
+  geom_point(color = 'black') +   
+  #scale_color_gradient(low = "#0B72F7", high = "#F70B0B") + # customized color palette
+  stat_smooth(geom = "smooth",  method = "lm", color='#0B72F7') +
+  #geom_function(fun=Vectorize(i_function), linewidth = 1) +
+  labs(color = "Age") +
+  ylab("Directed Exploration") + 
+  xlab("Age") +  
+  ylim(0.45,0.85) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 18),
+        axis.title = element_text(size = 22),
+        plot.title = element_text(size = 24, hjust = 0.5),
+        plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines'))
+print(direxpl_vs_age)
+```
+
 
 # Information and Reward Analyses
 ## Mixed Effects Model for Information and Reward Utilization/Prioritization
@@ -250,6 +805,896 @@ Run a mixed-effects linear regression to regress **choice number** in trial agai
 info_rew_mix_mod <- lmerTest::lmer(Choice_Number ~ 1 + Information*Reward*Trial*Age + (1|Subject), data=info_rew_mixed_eff_data, control=lmerControl(optCtrl=list(optimizer='Nelder-Mead',maxfun=2e8)))
 summary(info_rew_mix_mod)
 confint(info_rew_mix_mod)
+```
+
+## Information and Reward Mixed-Effects Model Plot 
+### Remove rows where Reward = 0 and run analyses
+This model will be used when binning and plotting data below. 
+```{r}
+# remove rows where reward = 0
+info_rew_mixed_eff_data_nz <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Reward != 0,] # remove rows where Reward = 0
+
+# run 4-way interaction on data with no Reward = 0
+# use lmerTest to give df and p-values in the summary as well
+info_rew_mix_mod_nz <- lmerTest::lmer(Choice_Number ~ 1 + Information*Reward*Trial*Age + (1|Subject), data=info_rew_mixed_eff_data_nz, control=lmerControl(optCtrl=list(optimizer='Nelder-Mead',maxfun=2e8)))
+summary(info_rew_mix_mod_nz)
+# mixed-effects model that regresses choice number in trial against information, reward, trial number, and age; finds all interactions between info, reward, age, and trial number
+# random slope = none
+# random intercept = subject
+```
+
+
+### Binning Raw Data
+We first binned ages into the youngest 15 ages (ages 18-33) and the oldest 15 ages (ages 56-71) of participants.
+```{r}
+# find youngest and oldest participant
+min_age <- min(info_rew_mixed_eff_data$Age) #18
+max_age <- max(info_rew_mixed_eff_data$Age) #71
+
+# determine bin characteristics
+# bin with youngest 15 ages (18-33), this will be all of the original YA sample, since the oldest YA participant is 26
+min_participants <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Age <= 33,]
+length(unique(min_participants$Subject)) # 57 subjects in this bin
+
+# bin with oldest 15 ages (56-71)
+max_participants <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Age >= 56,]
+length(unique(max_participants$Subject)) # 30 subjects in this bin
+
+# create new dataframes for each bin to work with in the following analyses
+# create 4 dataframes total: young bin, young bin without zeroes, old bin, old bin without zeroes
+# this is important because when plotting the reward values, we don't want to include reward = 0 rows because there is a disproportionately large number of 0's due to the nature of the task, so this will not allow proper visualization of our findings. # instead, we will want to include 0's for information bins and exclude 0's for reward bins
+
+# young bin df
+young_bin_df <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Age <= 33,]
+young_bin_nrz_df <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Age <= 33 & info_rew_mixed_eff_data$Reward != 0,]
+
+# old bin df
+old_bin_df <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Age >= 56,]
+old_bin_nrz_df <- info_rew_mixed_eff_data[info_rew_mixed_eff_data$Age >= 56 & info_rew_mixed_eff_data$Reward != 0,]
+
+```
+
+#### Young Reward Bins 
+Next, we binned trial data and reward data in the two age bins.
+```{r}
+# CREATE UNIQUE TRIAL AND REWARD BINS FOR EACH SUBJECT
+# Bin trial numbers by unique Subject
+young_bin_nrz_df <- young_bin_nrz_df %>%
+  group_by(Subject) %>% # perform the next functions by unique Subject
+  mutate(Trial_bin_ranges = cut(Trial, breaks=3)) %>% # create bins (by subject) for trial numbers; will result in a bin range unique to a subject; only leaving this in here as a sanity check to make sure it is going by unique subject id
+  mutate(Trial_bins = as.numeric(cut(Trial, breaks=3))) # create a column with the bin ranges replaced with bin number 1, 2, or 3
+
+# Specify the number of reward bins
+num_bins <- 5
+# Split into bins of equal amounts
+young_bin_nrz_df <- young_bin_nrz_df %>%
+  mutate(Reward_bins = cut(Reward, breaks = seq(0, 1, length.out = num_bins + 1), labels = FALSE, include.lowest = TRUE))
+
+# FIND AND STORE REWARD BIN PLOT COORDINATES
+# Find the average x- (reward) and y-values (choice number) for each subject in each reward bin, in each trial bin
+# Place these values in a new table
+# Each subject should therefore end up with 15 x-y coordinates, one for each reward bin in each trial bin
+tmp_young_bin_nrz_df <- data.frame(matrix(ncol = 5, nrow = 1)) # create temp df to hold data and bind to main df in for loop below
+colnames(tmp_young_bin_nrz_df) <- c('Subject', 'Trial_bin', 'Reward_bin', 'X_rew', 'Y_cn') # provide column names
+young_rew_bin_coordinates <- data.frame() # create new data frame for YA bin coordinate values; should be 855 rows (check)
+
+for(s in unique(young_bin_nrz_df$Subject)){ # for each unique subject in tmp_young_bin_nrz_df$Subject
+  for(t in unique(young_bin_nrz_df$Trial_bins)){  # for each unique trial bin in tmp_young_bin_nrz_df$Trial_bins
+    for(r in unique(young_bin_nrz_df$Reward_bins)){  # for each unique reward bin in tmp_young_bin_nrz_df$Reward_bins
+      tmp_young_bin_nrz_df$Subject = s # the value to be placed in the 'Subject' column is the value of s during that loop
+      tmp_young_bin_nrz_df$Trial_bin = t # the value to be placed in the 'Trial_bin' column is the value of t during that loop
+      tmp_young_bin_nrz_df$Reward_bin = r # the value to be placed in the 'Reward_bin' column is the value of r during that loop
+      subset_data <- subset(young_bin_nrz_df, Subject == s & Trial_bins == t & Reward_bins == r) # look only at rows in the df where the s, t, and r conditions are met
+      tmp_young_bin_nrz_df$X_rew = mean(subset_data$Reward, na.rm=TRUE) # fill the value of 'X_rew' in with the mean of the reward column in the subset data where conditions are met
+      tmp_young_bin_nrz_df$Y_cn = mean(subset_data$Choice_Number, na.rm=TRUE) # fill the value of 'Y_cn' in with the mean of the choice number column in the subset data where conditions are met
+      young_rew_bin_coordinates = rbind(young_rew_bin_coordinates, tmp_young_bin_nrz_df) # bind the row in the temp df that was created during this iteration of the for loop to the main dataframe; with each loop, a new row will be pasted to the main df
+    }
+  }
+} 
+
+# NORMALIZE REWARD AND CHOICE NUMBER VALUES 
+# we need to normalize our reward and choice number data in order to account for within-subject variability 
+# removing between-subject variability in the error bars
+# https://www.cogsci.nl/blog/tutorials/156-an-easy-way-to-create-graphs-with-within-subject-error-bars 
+# the error bars get messed up because the average of reward differs per participant quite a bit
+# to remove the between-subject variability, subtract the subject average from each observation, and add the grand average (i.e., the average of all the cells)
+
+# find the "grand average" for reward and choice number 
+young_rew_grand_average <- mean(young_bin_nrz_df$Reward, na.rm=TRUE) # 0.6345349
+young_cn_grand_average <- mean(young_bin_nrz_df$Choice_Number, na.rm=TRUE) # 4.619752
+
+# find the average reward and choice number values for each subject in the young bin
+tmp_sub_rewcn_avg <- data.frame(matrix(ncol = 3, nrow = 1)) # create a temporary df 
+colnames(tmp_sub_rewcn_avg) <- c('Subject', 'Avg_rew', 'Avg_cn') # provide column names
+young_sub_rewcn_avg <- data.frame() # create new data frame for young bin value averages
+
+# make dataframe with the average X and Y value for each subject in reward bin within each trial bin
+for(s in unique(young_bin_nrz_df$Subject)){
+  tmp_sub_rewcn_avg$Subject = s
+  subset_data <- subset(young_bin_nrz_df, Subject == s)
+  tmp_sub_rewcn_avg$Avg_rew = mean(subset_data$Reward, na.rm = TRUE)
+  tmp_sub_rewcn_avg$Avg_cn = mean(subset_data$Choice_Number, na.rm = TRUE)
+  young_sub_rewcn_avg = rbind(young_sub_rewcn_avg, tmp_sub_rewcn_avg)
+}
+
+# add subject averages to young_rew_bin_coordinates df
+## reward averages 
+young_rew_bin_coordinates$Avg_rew <- NA # make new column
+
+for (i in 1:nrow(young_rew_bin_coordinates)) {
+  subject_value <- young_rew_bin_coordinates$Subject[i]
+  matching_row <- young_sub_rewcn_avg[young_sub_rewcn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { young_rew_bin_coordinates
+    young_rew_bin_coordinates$Avg_rew[i] <- matching_row$Avg_rew
+  }
+}
+
+## choice number averages
+young_rew_bin_coordinates$Avg_cn <- NA # make new column
+
+for (i in 1:nrow(young_rew_bin_coordinates)) {
+  subject_value <- young_rew_bin_coordinates$Subject[i]
+  matching_row <- young_sub_rewcn_avg[young_sub_rewcn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { young_rew_bin_coordinates
+    young_rew_bin_coordinates$Avg_cn[i] <- matching_row$Avg_cn
+  }
+}
+
+## subtract subject average and add grand average, making a new column for the new normalized reward values 
+young_rew_bin_coordinates$norm_rew <- young_rew_bin_coordinates$X_rew - young_rew_bin_coordinates$Avg_rew + young_rew_grand_average
+young_rew_bin_coordinates$norm_cn <- young_rew_bin_coordinates$Y_cn - young_rew_bin_coordinates$Avg_cn + young_cn_grand_average
+
+
+#### now we have normalized coordinates for each participant within each of our bins; let's average that to find the coordinates that we will plot
+# take all of the normalized coordinates, and average across subjects per reward bin within each trial bin, resulting in one df containing 15 sets of coordinates to be plotted as the average binned raw data
+tmp_avg_rew_pts <- data.frame(matrix(ncol = 4, nrow = 1)) # create temp df
+colnames(tmp_avg_rew_pts) <- c('Trial_bin', 'Reward_bin', 'avg_X', 'avg_Y') # provide column names
+young_avg_rew_coordinates <- data.frame() # create new data frame for YA reward bin coordinate value averages
+
+
+# make dataframe with the average X and Y value for each reward bin and each trial; make avg_x and avg_y result from the normalized cn and reward dat
+for(t in unique(young_rew_bin_coordinates$Trial_bin)){
+  for(r in unique(young_rew_bin_coordinates$Reward_bin)){
+    tmp_avg_rew_pts$Trial_bin = t
+    tmp_avg_rew_pts$Reward_bin = r
+    subset_data <- subset(young_rew_bin_coordinates, Trial_bin == t & Reward_bin == r)
+    tmp_avg_rew_pts$avg_X = mean(subset_data$norm_rew, na.rm = TRUE) # using normalized values here
+    tmp_avg_rew_pts$avg_Y = mean(subset_data$norm_cn, na.rm = TRUE) # using normalized values here
+    young_avg_rew_coordinates = rbind(young_avg_rew_coordinates, tmp_avg_rew_pts)
+  }
+}
+```
+
+#### Old Reward Bins 
+Next, we binned trial data and reward data in the two age bins.
+```{r}
+# CREATE UNIQUE TRIAL AND REWARD BINS FOR EACH SUBJECT
+# Bin trial numbers by unique Subject
+old_bin_nrz_df <- old_bin_nrz_df %>%
+  group_by(Subject) %>% # perform the next functions by unique Subject
+  mutate(Trial_bin_ranges = cut(Trial, breaks=3)) %>% # create bins (by subject) for trial numbers; will result in a bin range unique to a subject; only leaving this in here as a sanity check to make sure it is going by unique subject id
+  mutate(Trial_bins = as.numeric(cut(Trial, breaks=3))) # create a column with the bin ranges replaced with bin number 1, 2, or 3
+
+# Specify the number of reward bins
+num_bins <- 5
+# Split into bins of equal amounts
+old_bin_nrz_df <- old_bin_nrz_df %>%
+  mutate(Reward_bins = cut(Reward, breaks = seq(0, 1, length.out = num_bins + 1), labels = FALSE, include.lowest = TRUE))
+
+# FIND AND STORE REWARD BIN PLOT COORDINATES
+# Find the average x- (reward) and y-values (choice number) for each subject in each reward bin, in each trial bin
+# Place these values in a new table
+# Each subject should therefore end up with 15 x-y coordinates, one for each reward bin in each trial bin
+tmp_old_bin_nrz_df <- data.frame(matrix(ncol = 5, nrow = 1)) # create temp df to hold data and bind to main df in for loop below
+colnames(tmp_old_bin_nrz_df) <- c('Subject', 'Trial_bin', 'Reward_bin', 'X_rew', 'Y_cn') # provide column names
+old_rew_bin_coordinates <- data.frame() # create new data frame for YA bin coordinate values; should be 855 rows (check)
+
+for(s in unique(old_bin_nrz_df$Subject)){ # for each unique subject in tmp_old_bin_nrz_df$Subject
+  for(t in unique(old_bin_nrz_df$Trial_bins)){  # for each unique trial bin in tmp_old_bin_nrz_df$Trial_bins
+    for(r in unique(old_bin_nrz_df$Reward_bins)){  # for each unique reward bin in tmp_old_bin_nrz_df$Reward_bins
+      tmp_old_bin_nrz_df$Subject = s # the value to be placed in the 'Subject' column is the value of s during that loop
+      tmp_old_bin_nrz_df$Trial_bin = t # the value to be placed in the 'Trial_bin' column is the value of t during that loop
+      tmp_old_bin_nrz_df$Reward_bin = r # the value to be placed in the 'Reward_bin' column is the value of r during that loop
+      subset_data <- subset(old_bin_nrz_df, Subject == s & Trial_bins == t & Reward_bins == r) # look only at rows in the df where the s, t, and r conditions are met
+      tmp_old_bin_nrz_df$X_rew = mean(subset_data$Reward, na.rm=TRUE) # fill the value of 'X_rew' in with the mean of the reward column in the subset data where conditions are met
+      tmp_old_bin_nrz_df$Y_cn = mean(subset_data$Choice_Number, na.rm=TRUE) # fill the value of 'Y_cn' in with the mean of the choice number column in the subset data where conditions are met
+      old_rew_bin_coordinates = rbind(old_rew_bin_coordinates, tmp_old_bin_nrz_df) # bind the row in the temp df that was created during this iteration of the for loop to the main dataframe; with each loop, a new row will be pasted to the main df
+    }
+  }
+} 
+
+# NORMALIZE REWARD AND CHOICE NUMBER VALUES 
+# we need to normalize our reward and choice number data in order to account for within-subject variability 
+# removing between-subject variability in the error bars
+# https://www.cogsci.nl/blog/tutorials/156-an-easy-way-to-create-graphs-with-within-subject-error-bars 
+# the error bars get messed up because the average of reward differs per participant quite a bit
+# to remove the between-subject variability, subtract the subject average from each observation, and add the grand average (i.e., the average of all the cells)
+
+# find the "grand average" for reward and choice number 
+old_rew_grand_average <- mean(old_bin_nrz_df$Reward, na.rm=TRUE) # 0.6120188
+old_cn_grand_average <- mean(old_bin_nrz_df$Choice_Number, na.rm=TRUE) # 4.880673
+
+# find the average reward and choice number values for each subject in the young bin
+tmp_sub_rewcn_avg <- data.frame(matrix(ncol = 3, nrow = 1)) # create a temporary df 
+colnames(tmp_sub_rewcn_avg) <- c('Subject', 'Avg_rew', 'Avg_cn') # provide column names
+old_sub_rewcn_avg <- data.frame() # create new data frame for young bin value averages
+
+# make dataframe with the average X and Y value for each subject in reward bin within each trial bin
+for(s in unique(old_bin_nrz_df$Subject)){
+  tmp_sub_rewcn_avg$Subject = s
+  subset_data <- subset(old_bin_nrz_df, Subject == s)
+  tmp_sub_rewcn_avg$Avg_rew = mean(subset_data$Reward, na.rm = TRUE)
+  tmp_sub_rewcn_avg$Avg_cn = mean(subset_data$Choice_Number, na.rm = TRUE)
+  old_sub_rewcn_avg = rbind(old_sub_rewcn_avg, tmp_sub_rewcn_avg)
+}
+
+# add subject averages to old_rew_bin_coordinates df
+## reward averages 
+old_rew_bin_coordinates$Avg_rew <- NA # make new column
+
+for (i in 1:nrow(old_rew_bin_coordinates)) {
+  subject_value <- old_rew_bin_coordinates$Subject[i]
+  matching_row <- old_sub_rewcn_avg[old_sub_rewcn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { old_rew_bin_coordinates
+    old_rew_bin_coordinates$Avg_rew[i] <- matching_row$Avg_rew
+  }
+}
+
+## choice number averages
+old_rew_bin_coordinates$Avg_cn <- NA # make new column
+
+for (i in 1:nrow(old_rew_bin_coordinates)) {
+  subject_value <- old_rew_bin_coordinates$Subject[i]
+  matching_row <- old_sub_rewcn_avg[old_sub_rewcn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { old_rew_bin_coordinates
+    old_rew_bin_coordinates$Avg_cn[i] <- matching_row$Avg_cn
+  }
+}
+
+## subtract subject average and add grand average, making a new column for the new normalized reward values 
+old_rew_bin_coordinates$norm_rew <- old_rew_bin_coordinates$X_rew - old_rew_bin_coordinates$Avg_rew + old_rew_grand_average
+old_rew_bin_coordinates$norm_cn <- old_rew_bin_coordinates$Y_cn - old_rew_bin_coordinates$Avg_cn + old_cn_grand_average
+
+
+#### now we have normalized coordinates for each participant within each of our bins; let's average that to find the coordinates that we will plot
+# take all of the normalized coordinates, and average across subjects per reward bin within each trial bin, resulting in one df containing 15 sets of coordinates to be plotted as the average binned raw data
+tmp_avg_rew_pts <- data.frame(matrix(ncol = 4, nrow = 1)) # create temp df
+colnames(tmp_avg_rew_pts) <- c('Trial_bin', 'Reward_bin', 'avg_X', 'avg_Y') # provide column names
+old_avg_rew_coordinates <- data.frame() # create new data frame for YA reward bin coordinate value averages
+
+
+# make dataframe with the average X and Y value for each reward bin and each trial; make avg_x and avg_y result from the normalized cn and reward dat
+for(t in unique(old_rew_bin_coordinates$Trial_bin)){
+  for(r in unique(old_rew_bin_coordinates$Reward_bin)){
+    tmp_avg_rew_pts$Trial_bin = t
+    tmp_avg_rew_pts$Reward_bin = r
+    subset_data <- subset(old_rew_bin_coordinates, Trial_bin == t & Reward_bin == r)
+    tmp_avg_rew_pts$avg_X = mean(subset_data$norm_rew, na.rm = TRUE) # using normalized values here
+    tmp_avg_rew_pts$avg_Y = mean(subset_data$norm_cn, na.rm = TRUE) # using normalized values here
+    old_avg_rew_coordinates = rbind(old_avg_rew_coordinates, tmp_avg_rew_pts)
+  }
+}
+```
+
+#### Young Information Bins
+```{r}
+## Bin trial numbers by unique Subject
+young_bin_df <- young_bin_df %>%
+  group_by(Subject) %>% # perform the next functions by unique Subject
+  mutate(Trial_bin_ranges = cut(Trial, breaks=3)) %>% # create bins (by subject) for trial numbers; will result in a bin range unique to a subject; only leaving this in here as a sanity check to make sure it is going by unique subject id
+  mutate(Trial_bins = as.numeric(cut(Trial, breaks=3))) # create a column with the bin ranges replaced with bin number 1, 2, or 3
+
+# Information Binning
+# Rank information values
+young_bin_df <- young_bin_df %>%
+  group_by(Subject, Trial_bins) %>% # perform the next functions by unique Subject AND trial_bin
+  mutate(Info_ranked = rank(Information)) # rank the reward values for each subject trial bin - by - trial bin
+
+# Specify the number of bins
+num_bins <- 5
+# YA Information Raw Plot 
+# Split into bins of equal amounts
+young_bin_df <- young_bin_df %>%
+  mutate(Info_bins = cut(Info_ranked, breaks = seq(0, max(Info_ranked), length.out = num_bins + 1), labels = FALSE, include.lowest = TRUE))
+
+# Find the x- (information) and y-values (choice number) for each subject in each information bin, in each trial bin
+# INFORMATION COORDINATES: Make new table that holds all x- (information) and y-values (choice number) per bin per subject; for each information bin within each trial bin, each subject should therefore end up with 15 x-y coordinates, one for each information bin in each trial bin
+tmp_young_info_bin <- data.frame(matrix(ncol = 5, nrow = 1)) # create temp df to hold data and bind to main df in for loop below
+colnames(tmp_young_info_bin) <- c('Subject', 'Trial_bin', 'Info_bin', 'X_info', 'Y_cn') # provide column names
+young_info_bin_coordinates <- data.frame() # create new data frame for YA bin coordinate values; should be 855 rows (check)
+
+for(s in unique(young_bin_df$Subject)){ # for each unique subject in tmp_YA_rew_bin_nz$Subject
+  for(t in unique(young_bin_df$Trial_bins)){  # for each unique trial bin in tmp_YA_rew_bin_nz$Trial_bins
+    for(i in unique(young_bin_df$Info_bins)){  # for each unique reward bin in tmp_YA_rew_bin_nz$Reward_bins
+      tmp_young_info_bin$Subject = s # the value to be placed in the 'Subject' column is the value of s during that loop
+      tmp_young_info_bin$Trial_bin = t # the value to be placed in the 'Trial_bin' column is the value of t during that loop
+      tmp_young_info_bin$Info_bin = i # the value to be placed in the 'Reward_bin' column is the value of r during that loop
+      subset_data <- subset(young_bin_df, Subject == s & Trial_bins == t & Info_bins == i) # look only at rows in the df where the s, t, and i conditions are met
+      tmp_young_info_bin$X_info = mean(subset_data$Information, na.rm=TRUE) # fill the value of 'X_rew' in with the mean of the reward column in the subset data where conditions are met
+      tmp_young_info_bin$Y_cn = mean(subset_data$Choice_Number, na.rm=TRUE) # fill the value of 'Y_cn' in with the mean of the reward column in the subset data where conditions are met
+      young_info_bin_coordinates = rbind(young_info_bin_coordinates, tmp_young_info_bin) # bind the row in the temp df that was created during this iteration of the for loop to the main dataframe; with each loop, a new row will be pasted to the main df
+    }
+  }
+}
+
+# NORMALIZE REWARD VALUES AND CHOICE NUMBER VALUES
+# we need to normalize our information and choice number data in order to account for within-subject variability 
+# removing between-subject variability in the error bars
+# https://www.cogsci.nl/blog/tutorials/156-an-easy-way-to-create-graphs-with-within-subject-error-bars 
+# the error bars get messed up because the average of information differs per participant quite a bit
+# to remove the between-subject variability, subtract the subject average from each observation, and add the grand average (i.e., the average of all the cells)
+
+# find the "grand average" for reward and choice number 
+young_info_grand_average <- mean(young_bin_df$Information, na.rm=TRUE) # 0.7732811
+young_cn_grand_average <- mean(young_bin_df$Choice_Number, na.rm=TRUE) # 4.841209
+
+# find the average information and choice number values for each subject
+tmp_sub_infocn_avg <- data.frame(matrix(ncol = 3, nrow = 1)) # create temp df 
+colnames(tmp_sub_infocn_avg) <- c('Subject', 'Avg_info', 'Avg_cn') # provide column names
+young_sub_infocn_avg <- data.frame() # create new data frame for young bin value averages
+
+# make dataframe with the average X and Y value for each subject in info bin within each trial bin
+for(s in unique(young_bin_df$Subject)){
+  tmp_sub_infocn_avg$Subject = s
+  subset_data <- subset(young_bin_df, Subject == s)
+  tmp_sub_infocn_avg$Avg_info = mean(subset_data$Information, na.rm = TRUE)
+  tmp_sub_infocn_avg$Avg_cn = mean(subset_data$Choice_Number, na.rm = TRUE)
+  young_sub_infocn_avg = rbind(young_sub_infocn_avg, tmp_sub_infocn_avg)
+}
+
+# add subject averages to young_info_bin_coordinates df
+# information averages 
+young_info_bin_coordinates$Avg_info <- NA # make new column
+
+for (i in 1:nrow(young_info_bin_coordinates)) {
+  subject_value <- young_info_bin_coordinates$Subject[i]
+  matching_row <- young_sub_infocn_avg[young_sub_infocn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { young_info_bin_coordinates
+    young_info_bin_coordinates$Avg_info[i] <- matching_row$Avg_info
+  }
+}
+
+# choice number averages
+young_info_bin_coordinates$Avg_cn <- NA # make new column
+
+for (i in 1:nrow(young_info_bin_coordinates)) {
+  subject_value <- young_info_bin_coordinates$Subject[i]
+  matching_row <- young_sub_infocn_avg[young_sub_infocn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { young_info_bin_coordinates
+    young_info_bin_coordinates$Avg_cn[i] <- matching_row$Avg_cn
+  }
+}
+
+## subtract subject average and add grand average, making a new column for the new normalized information and cn values 
+young_info_bin_coordinates$norm_info <- young_info_bin_coordinates$X_info - young_info_bin_coordinates$Avg_info + young_info_grand_average
+young_info_bin_coordinates$norm_cn <- young_info_bin_coordinates$Y_cn - young_info_bin_coordinates$Avg_cn + young_cn_grand_average
+
+
+#### now we have normalized coordinates for each participant within each of our bins; let's average that to find the coordinates that we will plot
+# take all of the normalized coordinates, and average across subjects per information bin within each trial bin, resulting in one df containing 15 sets of coordinates to be plotted as the average binned raw data
+tmp_avg_info_pts <- data.frame(matrix(ncol = 4, nrow = 1)) # create temp df
+colnames(tmp_avg_info_pts) <- c('Trial_bin', 'Info_bin', 'avg_X', 'avg_Y') # provide column names
+young_avg_info_coordinates <- data.frame() # create new data frame for YA reward bin coordinate value averages
+
+
+# make dataframe with the average X and Y value for each reward bin and each trial; make avg_x and avg_y result from the normalized cn and reward data
+for(t in unique(young_info_bin_coordinates$Trial_bin)){
+  for(i in unique(young_info_bin_coordinates$Info_bin)){
+    tmp_avg_info_pts$Trial_bin = t
+    tmp_avg_info_pts$Info_bin = i
+    subset_data <- subset(young_info_bin_coordinates, Trial_bin == t & Info_bin == i)
+    tmp_avg_info_pts$avg_X = mean(subset_data$norm_info, na.rm = TRUE) # using normalized values here
+    tmp_avg_info_pts$avg_Y = mean(subset_data$norm_cn, na.rm = TRUE) # using normalized values here
+    young_avg_info_coordinates = rbind(young_avg_info_coordinates, tmp_avg_info_pts)
+  }
+}
+
+```
+
+#### Old Information Bins
+```{r}
+## Bin trial numbers by unique Subject
+old_bin_df <- old_bin_df %>%
+  group_by(Subject) %>% # perform the next functions by unique Subject
+  mutate(Trial_bin_ranges = cut(Trial, breaks=3)) %>% # create bins (by subject) for trial numbers; will result in a bin range unique to a subject; only leaving this in here as a sanity check to make sure it is going by unique subject id
+  mutate(Trial_bins = as.numeric(cut(Trial, breaks=3))) # create a column with the bin ranges replaced with bin number 1, 2, or 3
+
+## Information Binning
+### Rank information values
+old_bin_df <- old_bin_df %>%
+  group_by(Subject, Trial_bins) %>% # perform the next functions by unique Subject AND trial_bin
+  mutate(Info_ranked = rank(Information)) # rank the reward values for each subject trial bin - by - trial bin
+
+### Specify the number of bins
+num_bins <- 5
+# YA Information Raw Plot 
+### Split into bins of equal amounts
+old_bin_df <- old_bin_df %>%
+  mutate(Info_bins = cut(Info_ranked, breaks = seq(0, max(Info_ranked), length.out = num_bins + 1), labels = FALSE, include.lowest = TRUE))
+
+# Find the x- (information) and y-values (choice number) for each subject in each information bin, in each trial bin
+## INFORMATION COORDINATES: Make new table that holds all x- (information) and y-values (choice number) per bin per subject; for each information bin within each trial bin, each subject should therefore end up with 15 x-y coordinates, one for each information bin in each trial bin
+tmp_old_info_bin <- data.frame(matrix(ncol = 5, nrow = 1)) # create temp df to hold data and bind to main df in for loop below
+colnames(tmp_old_info_bin) <- c('Subject', 'Trial_bin', 'Info_bin', 'X_info', 'Y_cn') # provide column names
+old_info_bin_coordinates <- data.frame() # create new data frame for YA bin coordinate values; should be 855 rows (check)
+
+for(s in unique(old_bin_df$Subject)){ # for each unique subject in tmp_YA_rew_bin_nz$Subject
+  for(t in unique(old_bin_df$Trial_bins)){  # for each unique trial bin in tmp_YA_rew_bin_nz$Trial_bins
+    for(i in unique(old_bin_df$Info_bins)){  # for each unique reward bin in tmp_YA_rew_bin_nz$Reward_bins
+      tmp_old_info_bin$Subject = s # the value to be placed in the 'Subject' column is the value of s during that loop
+      tmp_old_info_bin$Trial_bin = t # the value to be placed in the 'Trial_bin' column is the value of t during that loop
+      tmp_old_info_bin$Info_bin = i # the value to be placed in the 'Reward_bin' column is the value of r during that loop
+      subset_data <- subset(old_bin_df, Subject == s & Trial_bins == t & Info_bins == i) # look only at rows in the df where the s, t, and i conditions are met
+      tmp_old_info_bin$X_info = mean(subset_data$Information, na.rm=TRUE) # fill the value of 'X_rew' in with the mean of the reward column in the subset data where conditions are met
+      tmp_old_info_bin$Y_cn = mean(subset_data$Choice_Number, na.rm=TRUE) # fill the value of 'Y_cn' in with the mean of the reward column in the subset data where conditions are met
+      old_info_bin_coordinates = rbind(old_info_bin_coordinates, tmp_old_info_bin) # bind the row in the temp df that was created during this iteration of the for loop to the main dataframe; with each loop, a new row will be pasted to the main df
+    }
+  }
+}
+
+### Normalize reward values and choice number values 
+# we need to normalize our information and choice number data in order to account for within-subject variability 
+# removing between-subject variability in the error bars
+# https://www.cogsci.nl/blog/tutorials/156-an-easy-way-to-create-graphs-with-within-subject-error-bars 
+# the error bars get messed up because the average of information differs per participant quite a bit
+# to remove the between-subject variability, subtract the subject average from each observation, and add the grand average (i.e., the average of all the cells)
+
+# find the "grand average" for reward and choice number 
+old_info_grand_average <- mean(old_bin_df$Information, na.rm=TRUE) # 0.7806684
+old_cn_grand_average <- mean(old_bin_df$Choice_Number, na.rm=TRUE) # 4.841209
+
+# find the average information and choice number values for each subject
+tmp_sub_infocn_avg <- data.frame(matrix(ncol = 3, nrow = 1)) # create temp df 
+colnames(tmp_sub_infocn_avg) <- c('Subject', 'Avg_info', 'Avg_cn') # provide column names
+old_sub_infocn_avg <- data.frame() # create new data frame for young bin value averages
+
+# make dataframe with the average X and Y value for each subject in info bin within each trial bin
+for(s in unique(old_bin_df$Subject)){
+  tmp_sub_infocn_avg$Subject = s
+  subset_data <- subset(old_bin_df, Subject == s)
+  tmp_sub_infocn_avg$Avg_info = mean(subset_data$Information, na.rm = TRUE)
+  tmp_sub_infocn_avg$Avg_cn = mean(subset_data$Choice_Number, na.rm = TRUE)
+  old_sub_infocn_avg = rbind(old_sub_infocn_avg, tmp_sub_infocn_avg)
+}
+
+# add subject averages to old_info_bin_coordinates df
+# information averages 
+old_info_bin_coordinates$Avg_info <- NA # make new column
+
+for (i in 1:nrow(old_info_bin_coordinates)) {
+  subject_value <- old_info_bin_coordinates$Subject[i]
+  matching_row <- old_sub_infocn_avg[old_sub_infocn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { old_info_bin_coordinates
+    old_info_bin_coordinates$Avg_info[i] <- matching_row$Avg_info
+  }
+}
+
+# choice number averages
+old_info_bin_coordinates$Avg_cn <- NA # make new column
+
+for (i in 1:nrow(old_info_bin_coordinates)) {
+  subject_value <- old_info_bin_coordinates$Subject[i]
+  matching_row <- old_sub_infocn_avg[old_sub_infocn_avg$Subject == subject_value, ] 
+  if (nrow(matching_row) > 0) { old_info_bin_coordinates
+    old_info_bin_coordinates$Avg_cn[i] <- matching_row$Avg_cn
+  }
+}
+
+## subtract subject average and add grand average, making a new column for the new normalized information and cn values 
+old_info_bin_coordinates$norm_info <- old_info_bin_coordinates$X_info - old_info_bin_coordinates$Avg_info + old_info_grand_average
+old_info_bin_coordinates$norm_cn <- old_info_bin_coordinates$Y_cn - old_info_bin_coordinates$Avg_cn + old_cn_grand_average
+
+
+#### now we have normalized coordinates for each participant within each of our bins; let's average that to find the coordinates that we will plot
+# take all of the normalized coordinates, and average across subjects per information bin within each trial bin, resulting in one df containing 15 sets of coordinates to be plotted as the average binned raw data
+tmp_avg_info_pts <- data.frame(matrix(ncol = 4, nrow = 1)) # create temp df
+colnames(tmp_avg_info_pts) <- c('Trial_bin', 'Info_bin', 'avg_X', 'avg_Y') # provide column names
+old_avg_info_coordinates <- data.frame() # create new data frame for old information bin coordinate value averages
+
+
+# make dataframe with the average X and Y value for each reward bin and each trial; make avg_x and avg_y result from the normalized cn and reward data
+for(t in unique(old_info_bin_coordinates$Trial_bin)){
+  for(i in unique(old_info_bin_coordinates$Info_bin)){
+    tmp_avg_info_pts$Trial_bin = t
+    tmp_avg_info_pts$Info_bin = i
+    subset_data <- subset(old_info_bin_coordinates, Trial_bin == t & Info_bin == i)
+    tmp_avg_info_pts$avg_X = mean(subset_data$norm_info, na.rm = TRUE) # using normalized values here
+    tmp_avg_info_pts$avg_Y = mean(subset_data$norm_cn, na.rm = TRUE) # using normalized values here
+    old_avg_info_coordinates = rbind(old_avg_info_coordinates, tmp_avg_info_pts)
+  }
+}
+```
+
+
+### Plotting the Binned Data
+#### Young Reward Plot
+```{r}
+# Plot Young Reward Data
+### Plotting
+# order reward bins in ascending order (important for plot)
+young_avg_rew_coordinates <- young_avg_rew_coordinates %>% arrange(Reward_bin)
+
+# plot average coordinates for young adults 
+## change default colors for the plots to match the model plot
+colors <- c("#E41818", "#26BC32", "#2A8FFC")
+factor_levels <- unique(young_avg_rew_coordinates$Trial_bin)
+## make the plot
+plot(young_avg_rew_coordinates$avg_X, young_avg_rew_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.0), ylim = c(-2,13))
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- young_avg_rew_coordinates[young_avg_rew_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+# using SE for error bars
+# Loop through factor levels again to draw error bars
+plot(young_avg_rew_coordinates$avg_X, young_avg_rew_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.0), ylim = c(-2,13))
+
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- young_avg_rew_coordinates[young_avg_rew_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+for (level in factor_levels) {
+  subset_data <- young_avg_rew_coordinates[young_avg_rew_coordinates$Trial_bin == level, ]
+
+  # Calculate standard error of the mean
+  se_values <- sd(subset_data$avg_Y) / sqrt(length(subset_data$avg_Y))
+
+  # Draw error bars using arrows
+  arrows(
+    subset_data$avg_X,
+    subset_data$avg_Y - se_values,
+    subset_data$avg_X,
+    subset_data$avg_Y + se_values,
+    angle = 90, code = 3, length = 0.1, col = colors[level]
+  )
+}
+
+young_rew_raw_plot <- recordPlot
+
+```
+
+#### Old Reward Plot
+```{r} 
+# Plot Young Reward Data
+### Plotting
+# order reward bins in ascending order (important for plot)
+old_avg_rew_coordinates <- old_avg_rew_coordinates %>% arrange(Reward_bin)
+
+# plot average coordinates for young adults 
+## change default colors for the plots to match the model plot
+colors <- c("#E41818", "#26BC32", "#2A8FFC")
+factor_levels <- unique(old_avg_rew_coordinates$Trial_bin)
+## make the plot
+plot(old_avg_rew_coordinates$avg_X, old_avg_rew_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.0), ylim = c(-2,13))
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- old_avg_rew_coordinates[old_avg_rew_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+# using SE for error bars
+# Loop through factor levels again to draw error bars
+plot(old_avg_rew_coordinates$avg_X, old_avg_rew_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.0), ylim = c(-2,13))
+
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- old_avg_rew_coordinates[old_avg_rew_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+for (level in factor_levels) {
+  subset_data <- old_avg_rew_coordinates[old_avg_rew_coordinates$Trial_bin == level, ]
+
+  # Calculate standard error of the mean
+  se_values <- sd(subset_data$avg_Y) / sqrt(length(subset_data$avg_Y))
+
+  # Draw error bars using arrows
+  arrows(
+    subset_data$avg_X,
+    subset_data$avg_Y - se_values,
+    subset_data$avg_X,
+    subset_data$avg_Y + se_values,
+    angle = 90, code = 3, length = 0.1, col = colors[level]
+  )
+}
+
+old_rew_raw_plot <- recordPlot
+
+```
+
+#### Young Information Plot 
+```{r}
+young_avg_info_coordinates <- young_avg_info_coordinates %>% arrange(Info_bin)
+
+# plot average coordinates for young adults 
+## change default colors for the plots to match the model plot
+colors <- c("#E41818", "#26BC32", "#2A8FFC")
+factor_levels <- unique(young_avg_info_coordinates$Trial_bin)
+## make the plot
+plot(young_avg_info_coordinates$avg_X, young_avg_info_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.5), ylim = c(-2,13))
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- young_avg_info_coordinates[young_avg_info_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+# using SE for error bars
+# Loop through factor levels again to draw error bars
+plot(young_avg_info_coordinates$avg_X, young_avg_info_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.5), ylim = c(-2,13))
+
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- young_avg_info_coordinates[young_avg_info_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+for (level in factor_levels) {
+  subset_data <- young_avg_info_coordinates[young_avg_info_coordinates$Trial_bin == level, ]
+
+  # Calculate standard error of the mean
+  se_values <- sd(subset_data$avg_Y) / sqrt(length(subset_data$avg_Y))
+
+  # Draw error bars using arrows
+  arrows(
+    subset_data$avg_X,
+    subset_data$avg_Y - se_values,
+    subset_data$avg_X,
+    subset_data$avg_Y + se_values,
+    angle = 90, code = 3, length = 0.1, col = colors[level]
+  )
+}
+
+young_info_raw_plot <- recordPlot()
+
+```
+#### Old Information Plot 
+```{r}
+old_avg_info_coordinates <- old_avg_info_coordinates %>% arrange(Info_bin)
+
+# plot average coordinates for young adults 
+## change default colors for the plots to match the model plot
+colors <- c("#E41818", "#26BC32", "#2A8FFC")
+factor_levels <- unique(old_avg_info_coordinates$Trial_bin)
+## make the plot
+plot(old_avg_info_coordinates$avg_X, old_avg_info_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.5), ylim = c(-2,13))
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- old_avg_info_coordinates[old_avg_info_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+# using SE for error bars
+# Loop through factor levels again to draw error bars
+plot(old_avg_info_coordinates$avg_X, old_avg_info_coordinates$avg_Y, type = "n", xlim = c(-0.01,1.5), ylim = c(-2,13))
+
+# connect points with lines
+for (level in factor_levels) {
+  subset_data <- old_avg_info_coordinates[old_avg_info_coordinates$Trial_bin == level, ]
+  points(subset_data$avg_X, subset_data$avg_Y, pch = 19, col = colors[level])
+  lines(subset_data$avg_X, subset_data$avg_Y, type = "b", col = colors[level])
+}
+
+for (level in factor_levels) {
+  subset_data <- old_avg_info_coordinates[old_avg_info_coordinates$Trial_bin == level, ]
+
+  # Calculate standard error of the mean
+  se_values <- sd(subset_data$avg_Y) / sqrt(length(subset_data$avg_Y))
+
+  # Draw error bars using arrows
+  arrows(
+    subset_data$avg_X,
+    subset_data$avg_Y - se_values,
+    subset_data$avg_X,
+    subset_data$avg_Y + se_values,
+    angle = 90, code = 3, length = 0.1, col = colors[level]
+  )
+}
+
+old_info_raw_plot <- recordPlot()
+
+```
+
+### Find marginal effects slopes and plot with binned data
+Next, we found the marginal effects of information/reward, age, and trial number on choice number from the mixed-effects model to provide regression lines atop the binned raw data found above. 
+```{r}
+# transform trial columns into numeric class for mean calculations
+young_bin_df$Trial <- as.numeric(young_bin_df$Trial)
+old_bin_df$Trial <- as.numeric(old_bin_df$Trial)
+young_bin_nrz_df$Trial <- as.numeric(young_bin_nrz_df$Trial)
+old_bin_nrz_df$Trial <- as.numeric(old_bin_nrz_df$Trial)
+
+# find average trials for each bin
+# we will need these to plot the marginal effects for each bin. within each trial bin, we want to find the marginal effect. to do this, we find the average trial number within each trial bin and make that the trial value when finding the marginal effects
+# Young information
+young_info_tbin1_mean <- mean(young_bin_df$Trial[young_bin_df$Trial_bins == 1], na.rm = TRUE)
+young_info_tbin2_mean <- mean(young_bin_df$Trial[young_bin_df$Trial_bins == 2], na.rm = TRUE)
+young_info_tbin3_mean <- mean(young_bin_df$Trial[young_bin_df$Trial_bins == 3], na.rm = TRUE)
+
+# Old information
+old_info_tbin1_mean <- mean(old_bin_df$Trial[old_bin_df$Trial_bins == 1], na.rm = TRUE)
+old_info_tbin2_mean <- mean(old_bin_df$Trial[old_bin_df$Trial_bins == 2], na.rm = TRUE)
+old_info_tbin3_mean <- mean(old_bin_df$Trial[old_bin_df$Trial_bins == 3], na.rm = TRUE)
+
+# Young reward
+young_rew_tbin1_mean <- mean(young_bin_nrz_df$Trial[young_bin_nrz_df$Trial_bins == 1], na.rm = TRUE)
+young_rew_tbin2_mean <- mean(young_bin_nrz_df$Trial[young_bin_nrz_df$Trial_bins == 2], na.rm = TRUE)
+young_rew_tbin3_mean <- mean(young_bin_nrz_df$Trial[young_bin_nrz_df$Trial_bins == 3], na.rm = TRUE)
+
+# Old reward
+old_rew_tbin1_mean <- mean(old_bin_nrz_df$Trial[old_bin_nrz_df$Trial_bins == 1], na.rm = TRUE)
+old_rew_tbin2_mean <- mean(old_bin_nrz_df$Trial[old_bin_nrz_df$Trial_bins == 2], na.rm = TRUE)
+old_rew_tbin3_mean <- mean(old_bin_nrz_df$Trial[old_bin_nrz_df$Trial_bins == 3], na.rm = TRUE)
+
+# find marginal effects for each of the 12 lines
+# Young information
+young_info_meffects_t1 <- ggpredict(info_rew_mix_mod, c("Information", "Age[18:33]", "Trial[young_info_tbin1_mean]"))
+young_info_meffects_t2 <- ggpredict(info_rew_mix_mod, c("Information", "Age[18:33]", "Trial[young_info_tbin2_mean]"))
+young_info_meffects_t3 <- ggpredict(info_rew_mix_mod, c("Information", "Age[18:33]", "Trial[young_info_tbin3_mean]"))
+
+# Old information
+old_info_meffects_t1 <- ggpredict(info_rew_mix_mod, c("Information", "Age[56:71]", "Trial[old_info_tbin1_mean]"))
+old_info_meffects_t2 <- ggpredict(info_rew_mix_mod, c("Information", "Age[56:71]", "Trial[old_info_tbin2_mean]"))
+old_info_meffects_t3 <- ggpredict(info_rew_mix_mod, c("Information", "Age[56:71]", "Trial[old_info_tbin3_mean]"))
+
+# Young reward
+young_rew_meffects_t1 <- ggpredict(info_rew_mix_mod_nz, c("Reward", "Age[18:33]", "Trial[young_rew_tbin1_mean]"))
+young_rew_meffects_t2 <- ggpredict(info_rew_mix_mod_nz, c("Reward", "Age[18:33]", "Trial[young_rew_tbin2_mean]"))
+young_rew_meffects_t3 <- ggpredict(info_rew_mix_mod_nz, c("Reward", "Age[18:33]", "Trial[young_rew_tbin3_mean]"))
+
+# Old reward
+old_rew_meffects_t1 <- ggpredict(info_rew_mix_mod_nz, c("Reward", "Age[56:71]", "Trial[old_rew_tbin1_mean]"))
+old_rew_meffects_t2 <- ggpredict(info_rew_mix_mod_nz, c("Reward", "Age[56:71]", "Trial[old_rew_tbin2_mean]"))
+old_rew_meffects_t3 <- ggpredict(info_rew_mix_mod_nz, c("Reward", "Age[56:71]", "Trial[old_rew_tbin3_mean]"))
+
+```
+
+
+### Make combined plot
+Next, we took our binned raw data points and overlapped the regression lines on top of them for best visualization of the mixed effects model results.
+```{r}
+# set theme for all plots 
+set_theme(
+  base = theme_classic()
+)
+
+# Young Information
+young_avg_info_coordinates$Trial_bin <- as.factor(young_avg_info_coordinates$Trial_bin)
+young_info_comb_plot <- ggplot(young_avg_info_coordinates, aes(x = avg_X, y = avg_Y, color = factor(Trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), guide = "legend", labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01) + # Adjust position if needed
+  geom_smooth(data = young_info_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_info_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_info_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Young Age Bin") + # add title
+  labs(subtitle = "Ages 18-33") +
+  xlim(0.43,1.2) +
+  ylim(0,10) +
+  ylab("Choice Number") + # add y-axis label
+  xlab("Information") + # add x-axis label
+  theme(panel.grid.major = element_blank()) +  # Remove major grid lines
+  theme(panel.grid.minor = element_blank()) +
+  theme(axis.text = element_text(size = 14)) + 
+  theme(axis.title = element_text(size = 16)) +
+  theme(plot.subtitle = element_text(size = 16)) +
+  theme(plot.title = element_text(size = 18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.text = element_text(size = 14)) +
+  theme(plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines')) +
+  theme(legend.position = "bottom") +
+  theme(legend.justification = "center") +
+  theme(legend.title= element_blank())
+young_info_comb_plot  
+
+# OA Information
+old_avg_info_coordinates$Trial_bin <- as.factor(old_avg_info_coordinates$Trial_bin)
+old_info_comb_plot <- ggplot(old_avg_info_coordinates, aes(x = avg_X, y = avg_Y, color = factor(Trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), guide = "legend", labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01, position = position_dodge(0.5)) + # Adjust position if needed
+  geom_smooth(data = old_info_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_info_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_info_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Old Age Bin") + # add title  
+  labs(subtitle = "Ages 56-71") +
+  xlim(0.43,1.2) +
+  ylim(0,10) +
+  ylab("Choice Number") + # add y-axis label
+  xlab("Information") + # add x-axis label
+  theme(panel.grid.major = element_blank()) +  # Remove major grid lines
+  theme(panel.grid.minor = element_blank()) +
+  theme(axis.text = element_text(size = 14)) + 
+  theme(axis.title = element_text(size = 16)) +
+  theme(plot.subtitle = element_text(size = 16)) +
+  theme(plot.title = element_text(size = 18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.text = element_text(size = 14)) +
+  theme(plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines')) +
+  theme(legend.position = "bottom") +
+  theme(legend.justification = "center") +
+  theme(legend.title= element_blank())
+old_info_comb_plot  
+
+
+# YA Reward
+young_avg_rew_coordinates$Trial_bin <- as.factor(young_avg_rew_coordinates$Trial_bin)
+young_rew_comb_plot <- ggplot(young_avg_rew_coordinates, aes(x = avg_X, y = avg_Y, color = factor(Trial_bin))) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), guide = "legend", labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01, position = position_dodge(0.5)) + # Adjust position if needed
+  geom_smooth(data = young_rew_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_rew_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = young_rew_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Young Age Bin") + # add title
+  labs(subtitle = "Ages 18-33") +
+  xlim(0,1.1) +
+  ylim(0,7.5) +
+  ylab("Choice Number") + # add y-axis label
+  xlab("Reward") + # add x-axis label
+  theme(panel.grid.major = element_blank()) +  # Remove major grid lines
+  theme(panel.grid.minor = element_blank()) +
+  theme(axis.text = element_text(size = 14)) + 
+  theme(axis.title = element_text(size = 16)) +
+  theme(plot.subtitle = element_text(size = 16)) +
+  theme(plot.title = element_text(size = 18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.text = element_text(size = 14)) +
+  theme(plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines')) +
+  theme(legend.position = "bottom") +
+  theme(legend.justification = "center") +
+  theme(legend.title= element_blank())
+young_rew_comb_plot 
+
+# OA Reward
+old_avg_rew_coordinates$Trial_bin <- as.factor(old_avg_rew_coordinates$Trial_bin)
+old_rew_comb_plot <- ggplot(old_avg_rew_coordinates, aes(x = avg_X, y = avg_Y, color = factor(Trial_bin)), xlim = c(0, 1.1), ylim = c(0, 13)) +
+  geom_point(show.legend = FALSE, size = 2) +
+  scale_color_manual(values=c("#E41818", "#26BC32", "#2A8FFC"), guide = "legend", labels = c("Early Trials", "Middle Trials", "Late Trials")) +
+  geom_errorbar(aes(ymin = avg_Y - sd(avg_Y) / sqrt(length(avg_Y)), ymax = avg_Y + sd(avg_Y) / sqrt(length(avg_Y))), width = 0.01, position = position_dodge(0.5)) + # Adjust position if needed
+  geom_smooth(data = old_rew_meffects_t1, aes(x = x, y = predicted), method = "lm", color = "#E41818", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_rew_meffects_t2, aes(x = x, y = predicted), method = "lm", color = "#26BC32", size = 1, fullrange = TRUE) +
+  geom_smooth(data = old_rew_meffects_t3, aes(x = x, y = predicted), method = "lm", color = "#2A8FFC", size = 1, fullrange = TRUE) +
+  ggtitle("Old Age Bin") + # add title
+  labs(subtitle = "Ages 56-71") +
+  xlim(0,1.1) +
+  ylim(0,7.5) +
+  ylab("Choice Number") + # add y-axis label
+  xlab("Reward") + # add x-axis label
+  theme(panel.grid.major = element_blank()) +  # Remove major grid lines
+  theme(panel.grid.minor = element_blank()) +
+  theme(axis.text = element_text(size = 14)) + 
+  theme(axis.title = element_text(size = 16)) +
+  theme(plot.subtitle = element_text(size = 16)) +
+  theme(plot.title = element_text(size = 18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5)) +
+  theme(legend.text = element_text(size = 14)) +
+  theme(plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines')) +
+  theme(legend.position = "bottom") +
+  theme(legend.justification = "center") +
+  theme(legend.title= element_blank())
+old_rew_comb_plot  
+
+cn_inforew_comb <- ggarrange(young_rew_comb_plot, old_rew_comb_plot, young_info_comb_plot, old_info_comb_plot, ncol = 2, nrow = 2, common.legend = TRUE, legend = "bottom", labels = c("A", "B", "C", "D"), font.label = list(size = 16))
+
+#cn_inforew_comb <- cn_inforew_comb +
+ # theme(legend.position = "bottom", legend.justification = "center", legend.box = "horizontal")
+
+print(cn_inforew_comb)
+
 ```
 
 ## Relationship Beween Information and Reward
@@ -368,6 +1813,103 @@ summary(rew_fs_cpt_age)
 confint(rew_fs_cpt_age)
 ```
 
+## Plot Forager Scores vs. Changepoint by Age
+```{r}
+# perform relevant calculations to be used in below plots 
+# perform information linear regressions based on age 
+lm_fit_i_cpt <- lm(changepoint ~ info_fs, data=forscore_cpt_data)
+lm_fit_r_cpt <- lm(changepoint ~ rew_fs, data=forscore_cpt_data)
+
+# define custom functions to restrict the rlm regression line to a certain x-range in the plot
+# information custom function
+i_function <- function(x) {
+  if (min(forscore_cpt_data$info_fs) < x & x < max(forscore_cpt_data$info_fs)) {
+    intercept <- lm_fit_i_cpt$coefficients[1]
+    slope <- lm_fit_i_cpt$coefficients[2]
+    y <- intercept + slope * x
+    return(y)
+  } else {
+    return(NA)
+  }
+}
+
+# reward custom function 
+r_function <- function(x) {
+  if (min(forscore_cpt_data$rew_fs) < x & x < max(forscore_cpt_data$rew_fs)) {
+    intercept <- lm_fit_r_cpt$coefficients[1]
+    slope <- lm_fit_r_cpt$coefficients[2]
+    y <- intercept + slope * x
+    return(y)
+  } else {
+    return(NA)
+  }
+}
+
+# get mean and sd cpts 
+mean_cpts <- mean(totals_df$cpt, na.rm = TRUE) 
+sd_cpts <- sd(totals_df$cpt, na.rm = TRUE) 
+
+# changepoint vs. information foraging
+cpts_vs_ifs <- ggplot(forscore_cpt_data, aes(info_fs, changepoint)) +
+  geom_point(aes(color = age)) +
+  scale_color_gradient(low = "#0B72F7", high = "#F70B0B") + # customized color palette
+  stat_smooth(linetype = 0, mapping = NULL, data = NULL, geom = "smooth", position = "identity",   method = "lm", formula = NULL, se = TRUE, n = 80, span = 0.75, fullrange =    
+  FALSE, level = 0.95, method.args = list(), na.rm = FALSE, orientation = NA, 
+  show.legend = NA, inherit.aes = TRUE) +
+  geom_function(fun=Vectorize(i_function), linewidth = 1) +
+  labs(color = "Age") +
+  scale_x_continuous(breaks = seq(0, 1.0, by = 0.2), limits = c(0.08, 1.0)) +
+  scale_y_continuous(limits = c(0, 90)) +
+  ylab("Final Changepoint") + # add y-axis label
+  xlab("Information Foraging Score") + # add x-axis label 
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(size = 20, hjust = 0.5),
+        plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines'),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        legend.position = "none") +
+  guides(color = guide_colorbar(barwidth = 18, barheight = 1))  # Adjust the size of the color bar
+cpts_vs_ifs
+
+# changepoint vs. reward foraging
+cpts_vs_rfs <- ggplot(forscore_cpt_data, aes(rew_fs, changepoint)) +
+  geom_point(aes(color = age)) +
+  scale_color_gradient(low = "#0B72F7", high = "#F70B0B") + # customized color palette
+  stat_smooth(linetype = 0, mapping = NULL, data = NULL, geom = "smooth", position = "identity",   method = "lm", formula = NULL, se = TRUE, n = 80, span = 0.75, fullrange =    
+  TRUE, level = 0.95, method.args = list(), na.rm = FALSE, orientation = NA, 
+  show.legend = NA, inherit.aes = TRUE) +
+  geom_function(fun=Vectorize(r_function), linewidth = 1) +
+  labs(color = "Age") +
+  scale_x_continuous(breaks = seq(0, 1.0, by = 0.2), limits = c(0.08, 1.0)) +
+  scale_y_continuous(limits = c(0, 90)) +
+  ylab("Final Changepoint") + # add y-axis label
+  xlab("Reward Foraging Score") + # add x-axis label 
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "white", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(size = 20, hjust = 0.5),
+        plot.margin = unit(c(1.4,1.4,1.4,1.4), 'lines'),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        legend.position = "none") +
+  guides(color = guide_colorbar(barwidth = 18, barheight = 1))  # Adjust the size of the color bar
+cpts_vs_rfs
+
+# Combine plots
+both_cpts_vs_fs <- ggarrange(cpts_vs_ifs, cpts_vs_rfs,ncol = 2, nrow = 1, common.legend = TRUE, legend = "bottom", labels = c("A", "B"), font.label = list(size = 19))
+both_cpts_vs_fs
+```
+
 
 # Mediation Analysis
 Run a mediation analysis to investigate whether information forager score mediates the relationship between age and final changepoint, using the “mediation” R software package (Tingley et al., 2014).
@@ -432,20 +1974,4 @@ info_age_fs_med <- mediate(
 )
 # sample size used: 154 
 print(summary(info_age_fs_med))
-#               Estimate 95% CI Lower 95% CI Upper             p-value    
-#ACME            -0.2012      -0.3163        -0.09 <0.0000000000000002 ***
-#ADE             -0.0662      -0.2373         0.09              0.4428    
-#Total Effect    -0.2674      -0.4664        -0.08              0.0028 ** 
-#Prop. Mediated   0.7525       0.3951         2.03              0.0028 ** 
-
-
-
 ```
-
-
-
-
-
-finishing up ...
-- remove my working directory from the top, users will fill this in themselves
-- remove path from loading in files\
